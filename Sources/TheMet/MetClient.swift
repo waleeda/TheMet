@@ -48,9 +48,20 @@ public final class MetClient {
         return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
+    public func autocomplete(_ searchTerm: String) async throws -> [String] {
+        let url = try buildURL(path: "search/autocomplete", queryItems: [URLQueryItem(name: "q", value: searchTerm)])
+        let response = try await fetch(url: url, as: AutocompleteResponse.self)
+        return response.terms
+    }
+
     public func object(id: Int) async throws -> MetObject {
         let url = try buildURL(path: "objects/\(id)")
         return try await fetch(url: url, as: MetObject.self)
+    }
+
+    public func relatedObjectIDs(for objectID: Int) async throws -> ObjectIDsResponse {
+        let url = try buildURL(path: "objects/\(objectID)/related")
+        return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
     public func allObjects(concurrentRequests: Int = 6) -> AsyncThrowingStream<MetObject, Error> {
