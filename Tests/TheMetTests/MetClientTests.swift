@@ -195,6 +195,120 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(streamedIDs, Set(ids))
     }
 
+    func testReportsProgressWhileStreamingObjects() async throws {
+        let ids = [1, 2, 3]
+        let session = URLSession.mock(respondingWith: { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            guard let id = Int(url.lastPathComponent) else { throw URLError(.unsupportedURL) }
+            let object = MetObject(
+                objectID: id,
+                isHighlight: nil,
+                accessionNumber: nil,
+                accessionYear: nil,
+                primaryImage: nil,
+                primaryImageSmall: nil,
+                department: nil,
+                objectName: nil,
+                title: "Object #\(id)",
+                culture: nil,
+                period: nil,
+                dynasty: nil,
+                reign: nil,
+                portfolio: nil,
+                artistDisplayName: nil,
+                artistDisplayBio: nil,
+                objectDate: nil,
+                medium: nil,
+                dimensions: nil,
+                creditLine: nil,
+                geographyType: nil,
+                city: nil,
+                state: nil,
+                county: nil,
+                country: nil,
+                classification: nil,
+                objectURL: nil,
+                tags: nil
+            )
+            return try JSONEncoder().encode(object)
+        })
+
+        let client = MetClient(session: session)
+        let progressCollector = ProgressCollector()
+        var streamedIDs: [Int] = []
+
+        for try await object in client.objects(ids: ids, concurrentRequests: 2, progress: { progress in
+            progressCollector.append(progress)
+        }) {
+            streamedIDs.append(object.objectID)
+        }
+
+        let progressUpdates = progressCollector.snapshot()
+
+        XCTAssertEqual(streamedIDs.sorted(), ids)
+        XCTAssertEqual(progressUpdates.map(\.completed), [1, 2, 3])
+        XCTAssertEqual(progressUpdates.map(\.total), Array(repeating: ids.count, count: ids.count))
+    }
+
+    func testStopsStreamingWhenCancelled() async throws {
+        let ids = [10, 11, 12]
+        let session = URLSession.mock(respondingWith: { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            guard let id = Int(url.lastPathComponent) else { throw URLError(.unsupportedURL) }
+            let object = MetObject(
+                objectID: id,
+                isHighlight: nil,
+                accessionNumber: nil,
+                accessionYear: nil,
+                primaryImage: nil,
+                primaryImageSmall: nil,
+                department: nil,
+                objectName: nil,
+                title: "Object #\(id)",
+                culture: nil,
+                period: nil,
+                dynasty: nil,
+                reign: nil,
+                portfolio: nil,
+                artistDisplayName: nil,
+                artistDisplayBio: nil,
+                objectDate: nil,
+                medium: nil,
+                dimensions: nil,
+                creditLine: nil,
+                geographyType: nil,
+                city: nil,
+                state: nil,
+                county: nil,
+                country: nil,
+                classification: nil,
+                objectURL: nil,
+                tags: nil
+            )
+            return try JSONEncoder().encode(object)
+        })
+
+        let client = MetClient(session: session)
+        var streamedIDs: [Int] = []
+        let cancellationFlag = CancellationFlag()
+
+        do {
+            for try await object in client.objects(
+                ids: ids,
+                concurrentRequests: 1,
+                cancellation: CooperativeCancellation { cancellationFlag.value }
+            ) {
+                streamedIDs.append(object.objectID)
+                cancellationFlag.cancel()
+            }
+            XCTFail("Expected stream to cancel after the first object")
+        } catch is CancellationError {
+            // Expected cancellation
+        }
+
+        XCTAssertEqual(streamedIDs, [10])
+    }
+
     func testFetchesDepartments() async throws {
         let session = URLSession.mock { request in
             guard let url = request.url else { throw URLError(.badURL) }
@@ -324,5 +438,41 @@ private extension URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [URLProtocolMock.self]
         return URLSession(configuration: configuration)
+    }
+}
+
+private final class ProgressCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var updates: [StreamProgress] = []
+
+    func append(_ progress: StreamProgress) {
+        lock.lock()
+        updates.append(progress)
+        lock.unlock()
+    }
+
+    func snapshot() -> [StreamProgress] {
+        lock.lock()
+        let result = updates
+        lock.unlock()
+        return result
+    }
+}
+
+private final class CancellationFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var value: Bool {
+        lock.lock()
+        let result = cancelled
+        lock.unlock()
+        return result
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
     }
 }
