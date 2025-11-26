@@ -6,6 +6,15 @@ public struct ObjectIDsResponse: Codable, Equatable {
     public let objectIDs: [Int]
 }
 
+public struct DepartmentsResponse: Codable, Equatable {
+    public let departments: [Department]
+}
+
+public struct Department: Codable, Equatable {
+    public let departmentId: Int
+    public let displayName: String
+}
+
 public struct ObjectQuery: Equatable {
     public var departmentIds: [Int]?
     public var hasImages: Bool?
@@ -28,6 +37,75 @@ public struct ObjectQuery: Equatable {
         }
         if let searchQuery, !searchQuery.isEmpty {
             items.append(URLQueryItem(name: "q", value: searchQuery))
+        }
+        return items
+    }
+}
+
+public struct SearchQuery: Equatable {
+    public var searchTerm: String
+    public var isHighlight: Bool?
+    public var hasImages: Bool?
+    public var departmentId: Int?
+    public var isOnView: Bool?
+    public var artistOrCulture: Bool?
+    public var medium: String?
+    public var geoLocation: String?
+    public var dateBegin: Int?
+    public var dateEnd: Int?
+
+    public init(
+        searchTerm: String,
+        isHighlight: Bool? = nil,
+        hasImages: Bool? = nil,
+        departmentId: Int? = nil,
+        isOnView: Bool? = nil,
+        artistOrCulture: Bool? = nil,
+        medium: String? = nil,
+        geoLocation: String? = nil,
+        dateBegin: Int? = nil,
+        dateEnd: Int? = nil
+    ) {
+        self.searchTerm = searchTerm
+        self.isHighlight = isHighlight
+        self.hasImages = hasImages
+        self.departmentId = departmentId
+        self.isOnView = isOnView
+        self.artistOrCulture = artistOrCulture
+        self.medium = medium
+        self.geoLocation = geoLocation
+        self.dateBegin = dateBegin
+        self.dateEnd = dateEnd
+    }
+
+    var queryItems: [URLQueryItem] {
+        var items: [URLQueryItem] = [URLQueryItem(name: "q", value: searchTerm)]
+        if let isHighlight {
+            items.append(URLQueryItem(name: "isHighlight", value: isHighlight ? "true" : "false"))
+        }
+        if let hasImages {
+            items.append(URLQueryItem(name: "hasImages", value: hasImages ? "true" : "false"))
+        }
+        if let departmentId {
+            items.append(URLQueryItem(name: "departmentId", value: String(departmentId)))
+        }
+        if let isOnView {
+            items.append(URLQueryItem(name: "isOnView", value: isOnView ? "true" : "false"))
+        }
+        if let artistOrCulture {
+            items.append(URLQueryItem(name: "artistOrCulture", value: artistOrCulture ? "true" : "false"))
+        }
+        if let medium, !medium.isEmpty {
+            items.append(URLQueryItem(name: "medium", value: medium))
+        }
+        if let geoLocation, !geoLocation.isEmpty {
+            items.append(URLQueryItem(name: "geoLocation", value: geoLocation))
+        }
+        if let dateBegin {
+            items.append(URLQueryItem(name: "dateBegin", value: String(dateBegin)))
+        }
+        if let dateEnd {
+            items.append(URLQueryItem(name: "dateEnd", value: String(dateEnd)))
         }
         return items
     }

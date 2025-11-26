@@ -37,6 +37,17 @@ public final class MetClient {
         return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
+    public func departments() async throws -> [Department] {
+        let url = try buildURL(path: "departments")
+        let response = try await fetch(url: url, as: DepartmentsResponse.self)
+        return response.departments
+    }
+
+    public func search(_ query: SearchQuery) async throws -> ObjectIDsResponse {
+        let url = try buildURL(path: "search", queryItems: query.queryItems)
+        return try await fetch(url: url, as: ObjectIDsResponse.self)
+    }
+
     public func object(id: Int) async throws -> MetObject {
         let url = try buildURL(path: "objects/\(id)")
         return try await fetch(url: url, as: MetObject.self)
