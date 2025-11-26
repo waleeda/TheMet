@@ -68,7 +68,10 @@ let searchResults = try await client.search(SearchQuery(searchTerm: "flowers", d
 
 let suggestions = try await client.autocomplete("sun")
 let related = try await client.relatedObjectIDs(for: 123).objectIDs
+let galleryNumber = try await client.object(id: 123).galleryNumber
 ```
+
+The `galleryNumber` property on `MetObject` is useful when you want to point visitors to a specific room in the building—perfect for National Gallery-style walkthroughs and wayfinding views in your app.
 
 ### Custom JSON decoding strategies
 

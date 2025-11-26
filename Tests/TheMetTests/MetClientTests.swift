@@ -22,6 +22,7 @@ final class MetClientTests: XCTestCase {
           "primaryImage": "https://images.metmuseum.org/1.jpg",
           "primaryImageSmall": "https://images.metmuseum.org/1-small.jpg",
           "department": "Asian Art",
+          "galleryNumber": "215",
           "objectName": "Jar",
           "title": "Blue and White Jar",
           "culture": "China",
@@ -48,6 +49,7 @@ final class MetClientTests: XCTestCase {
         let object = try JSONDecoder().decode(MetObject.self, from: json)
         XCTAssertEqual(object.objectID, 1)
         XCTAssertEqual(object.title, "Blue and White Jar")
+        XCTAssertEqual(object.galleryNumber, "215")
         XCTAssertEqual(object.tags?.first?.term, "Ceramics")
     }
 
@@ -198,6 +200,7 @@ final class MetClientTests: XCTestCase {
                     primaryImage: nil,
                     primaryImageSmall: nil,
                     department: nil,
+                    galleryNumber: nil,
                     objectName: nil,
                     title: "Object #\(id)",
                     culture: nil,
@@ -248,6 +251,7 @@ final class MetClientTests: XCTestCase {
                 primaryImage: nil,
                 primaryImageSmall: nil,
                 department: nil,
+                galleryNumber: nil,
                 objectName: nil,
                 title: "Object #\(id)",
                 culture: nil,
@@ -303,6 +307,7 @@ final class MetClientTests: XCTestCase {
                 primaryImage: nil,
                 primaryImageSmall: nil,
                 department: nil,
+                galleryNumber: nil,
                 objectName: nil,
                 title: "Object #\(id)",
                 culture: nil,

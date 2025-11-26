@@ -184,6 +184,7 @@ public struct MetObject: Codable, Equatable {
     public let primaryImage: String?
     public let primaryImageSmall: String?
     public let department: String?
+    public let galleryNumber: String?
     public let objectName: String?
     public let title: String?
     public let culture: String?
