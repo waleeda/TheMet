@@ -1,0 +1,45 @@
+import Foundation
+import TheMet
+
+public enum ArtworkSource: Equatable, Hashable {
+    case met(id: Int)
+    case nationalGallery(id: Int)
+
+    public var displayName: String {
+        switch self {
+        case .met:
+            return "The Met"
+        case .nationalGallery:
+            return "National Gallery of Art"
+        }
+    }
+}
+
+public struct ArtTimelineEntry: Identifiable, Equatable {
+    public let id = UUID()
+    public let title: String
+    public let artist: String
+    public let dateText: String
+    public let medium: String
+    public let imageURL: URL?
+    public let summary: String
+    public let source: ArtworkSource
+    public let periodContext: String
+}
+
+public struct ArtLesson: Identifiable, Equatable {
+    public let id = UUID()
+    public let headline: String
+    public let overview: String
+    public let takeaway: String
+    public let relatedEntries: [ArtTimelineEntry]
+}
+
+public struct CombinedSearchResult: Identifiable, Equatable {
+    public let id = UUID()
+    public let title: String
+    public let subtitle: String
+    public let museum: String
+    public let imageURL: URL?
+    public let source: ArtworkSource
+}
