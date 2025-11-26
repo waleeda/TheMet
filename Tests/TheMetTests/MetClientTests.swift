@@ -67,6 +67,15 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.departments.last?.departmentId, 2)
     }
 
+    func testDecodesAutocompleteResponse() throws {
+        let json = """
+        {"terms":["sun","sunflower","sunset"]}
+        """.data(using: .utf8)!
+
+        let response = try JSONDecoder().decode(AutocompleteResponse.self, from: json)
+        XCTAssertEqual(response.terms, ["sun", "sunflower", "sunset"])
+    }
+
     func testStreamsObjectsForAllIDs() async throws {
         let ids = [4, 5, 6]
         let session = URLSession.mock(respondingWith: { request in
@@ -156,6 +165,39 @@ final class MetClientTests: XCTestCase {
 
         XCTAssertEqual(response.objectIDs, [42])
         XCTAssertEqual(response.total, 1)
+    }
+
+    func testAutocompleteBuildsQueryParameters() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/public/collection/v1/search/autocomplete")
+            let parameters = Dictionary(uniqueKeysWithValues: (components?.queryItems ?? []).map { ($0.name, $0.value) })
+            XCTAssertEqual(parameters["q"], "sun")
+
+            let response = AutocompleteResponse(terms: ["sun", "sunflower"])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let terms = try await client.autocomplete("sun")
+
+        XCTAssertEqual(terms, ["sun", "sunflower"])
+    }
+
+    func testFetchesRelatedObjectIDs() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertEqual(url.absoluteString, "https://collectionapi.metmuseum.org/public/collection/v1/objects/123/related")
+            let response = ObjectIDsResponse(total: 2, objectIDs: [4, 5])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let response = try await client.relatedObjectIDs(for: 123)
+
+        XCTAssertEqual(response.objectIDs, [4, 5])
+        XCTAssertEqual(response.total, 2)
     }
 }
 
