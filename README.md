@@ -70,6 +70,19 @@ let suggestions = try await client.autocomplete("sun")
 let related = try await client.relatedObjectIDs(for: 123).objectIDs
 ```
 
+## National Gallery of Art collection support
+
+The package also includes a lightweight `NationalGalleryClient` for the National Gallery of Art Collection API. The API surface mirrors the Met helper methods so you can search for objects and fetch details with familiar patterns:
+
+```swift
+import TheMet
+
+let nga = NationalGalleryClient()
+let landscapes = try await nga.objectIDs(for: NationalGalleryObjectQuery(keyword: "landscape", hasImages: true, page: 1, pageSize: 25)).objectIDs
+let object = try await nga.object(id: landscapes.first ?? 0)
+print(object.title ?? "Untitled")
+```
+
 ### Custom JSON decoding strategies
 
 If your project requires specific decoding behavior (for example, ISO 8601 dates or custom floating-point formatting), you can configure the decoder used by `MetClient` without building it yourself:

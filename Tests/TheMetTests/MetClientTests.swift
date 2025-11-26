@@ -446,6 +446,70 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.objectIDs, [4, 5])
         XCTAssertEqual(response.total, 2)
     }
+
+    func testDecodesNationalGalleryObjectIDsResponse() throws {
+        let json = """
+        {"totalRecords":2,"objectIDs":[101,102]}
+        """.data(using: .utf8)!
+
+        let response = try JSONDecoder().decode(NationalGalleryObjectIDsResponse.self, from: json)
+
+        XCTAssertEqual(response.totalRecords, 2)
+        XCTAssertEqual(response.objectIDs, [101, 102])
+    }
+
+    func testBuildsNationalGalleryQueryParameters() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/collection/art/objects")
+
+            let parameters = Dictionary(uniqueKeysWithValues: (components?.queryItems ?? []).map { ($0.name, $0.value) })
+            XCTAssertEqual(parameters["q"], "landscape")
+            XCTAssertEqual(parameters["classification"], "Painting")
+            XCTAssertEqual(parameters["images"], "true")
+            XCTAssertEqual(parameters["page"], "2")
+            XCTAssertEqual(parameters["size"], "50")
+
+            let response = NationalGalleryObjectIDsResponse(totalRecords: 0, objectIDs: [])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = NationalGalleryClient(session: session)
+        let response = try await client.objectIDs(for: NationalGalleryObjectQuery(keyword: "landscape", classification: "Painting", hasImages: true, page: 2, pageSize: 50))
+
+        XCTAssertEqual(response.totalRecords, 0)
+        XCTAssertEqual(response.objectIDs, [])
+    }
+
+    func testFetchesNationalGalleryObject() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertEqual(url.absoluteString, "https://api.nga.gov/collection/art/objects/501")
+
+            let object = NationalGalleryObject(
+                id: 501,
+                title: "Sample Painting",
+                creator: "Jane Doe",
+                displayDate: "1899",
+                medium: "Oil on canvas",
+                dimensions: "10 x 12 in",
+                department: "Paintings",
+                objectType: "Painting",
+                image: "https://images.nga.gov/501.jpg",
+                description: "A sample painting"
+            )
+            return try JSONEncoder().encode(object)
+        }
+
+        let client = NationalGalleryClient(session: session)
+        let object = try await client.object(id: 501)
+
+        XCTAssertEqual(object.id, 501)
+        XCTAssertEqual(object.title, "Sample Painting")
+        XCTAssertEqual(object.creator, "Jane Doe")
+        XCTAssertEqual(object.objectType, "Painting")
+    }
 }
 
 private final class URLProtocolMock: URLProtocol {
