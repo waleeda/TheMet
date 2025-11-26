@@ -4,6 +4,7 @@ import FoundationNetworking
 public enum MetClientError: Error, LocalizedError {
     case invalidResponse
     case statusCode(Int)
+    case requestBuilderFailed(Error)
 
     public var errorDescription: String? {
         switch self {
@@ -11,6 +12,8 @@ public enum MetClientError: Error, LocalizedError {
             return "Unexpected response from The Met Collection API."
         case .statusCode(let code):
             return "Received HTTP status code \(code) from The Met Collection API."
+        case .requestBuilderFailed:
+            return "Failed to build a request for The Met Collection API."
         }
     }
 }
@@ -20,6 +23,8 @@ public final class MetClient {
 
     public let baseURL: URL
     private let session: URLSession
+    private let requestBuilder: RequestBuilder
+    private let retryConfiguration: RetryConfiguration
 
     public struct DecodingStrategies {
         public var dateDecodingStrategy: JSONDecoder.DateDecodingStrategy
@@ -40,16 +45,40 @@ public final class MetClient {
         }
     }
 
+    public struct RetryConfiguration {
+        public var maxRetries: Int
+        public var initialBackoff: TimeInterval
+        public var backoffMultiplier: Double
+
+        public init(maxRetries: Int = 2, initialBackoff: TimeInterval = 0.5, backoffMultiplier: Double = 2.0) {
+            self.maxRetries = max(0, maxRetries)
+            self.initialBackoff = max(0, initialBackoff)
+            self.backoffMultiplier = max(1, backoffMultiplier)
+        }
+    }
+
+    public typealias RequestBuilder = @Sendable (URL) throws -> URLRequest
+
     public let decoder: JSONDecoder
 
     public init(
         baseURL: URL = URL(string: "https://collectionapi.metmuseum.org/public/collection/v1")!,
         session: URLSession = .shared,
         decoder: JSONDecoder? = nil,
-        decodingStrategies: DecodingStrategies = DecodingStrategies()
+        decodingStrategies: DecodingStrategies = DecodingStrategies(),
+        requestTimeout: TimeInterval = 30,
+        retryConfiguration: RetryConfiguration = RetryConfiguration(),
+        requestBuilder: RequestBuilder? = nil
     ) {
         self.baseURL = baseURL
         self.session = session
+        self.retryConfiguration = retryConfiguration
+        let timeout = requestTimeout
+        self.requestBuilder = requestBuilder ?? { url in
+            var request = URLRequest(url: url)
+            request.timeoutInterval = timeout
+            return request
+        }
         if let decoder {
             self.decoder = decoder
         } else {
@@ -226,14 +255,61 @@ public final class MetClient {
     }
 
     private func fetch<T: Decodable>(url: URL, as type: T.Type) async throws -> T {
-        let request = URLRequest(url: url)
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MetClientError.invalidResponse
+        var attempt = 0
+        var backoff = retryConfiguration.initialBackoff
+
+        while true {
+            let request: URLRequest
+
+            do {
+                request = try requestBuilder(url)
+            } catch {
+                throw MetClientError.requestBuilderFailed(error)
+            }
+
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw MetClientError.invalidResponse
+                }
+                guard 200..<300 ~= httpResponse.statusCode else {
+                    if shouldRetry(statusCode: httpResponse.statusCode, attempt: attempt) {
+                        attempt += 1
+                        try await applyBackoff(delay: backoff)
+                        backoff *= retryConfiguration.backoffMultiplier
+                        continue
+                    }
+                    throw MetClientError.statusCode(httpResponse.statusCode)
+                }
+                return try decoder.decode(type, from: data)
+            } catch {
+                if shouldRetry(error: error, attempt: attempt) {
+                    attempt += 1
+                    try await applyBackoff(delay: backoff)
+                    backoff *= retryConfiguration.backoffMultiplier
+                    continue
+                }
+                throw error
+            }
         }
-        guard 200..<300 ~= httpResponse.statusCode else {
-            throw MetClientError.statusCode(httpResponse.statusCode)
+    }
+
+    private func shouldRetry(statusCode: Int, attempt: Int) -> Bool {
+        guard attempt < retryConfiguration.maxRetries else { return false }
+        return statusCode == 429 || (500..<600).contains(statusCode)
+    }
+
+    private func shouldRetry(error: Error, attempt: Int) -> Bool {
+        guard attempt < retryConfiguration.maxRetries else { return false }
+        if let urlError = error as? URLError {
+            return urlError.code != .cancelled && urlError.code != .badURL
         }
-        return try decoder.decode(type, from: data)
+        return false
+    }
+
+    private func applyBackoff(delay: TimeInterval) async throws {
+        guard delay > 0 else { return }
+        let nanoseconds = UInt64(delay * 1_000_000_000)
+        try await Task.sleep(nanoseconds: nanoseconds)
     }
 }
