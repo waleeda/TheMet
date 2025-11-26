@@ -364,6 +364,16 @@ final class MetClientTests: XCTestCase {
             XCTAssertEqual(parameters["metadataDate"], "2024-04-10")
 
             let response = ObjectIDsResponse(total: 0, objectIDs: [])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let response = try await client.objectIDs(for: ObjectQuery(metadataDate: metadataDate))
+
+        XCTAssertEqual(response.objectIDs, [])
+        XCTAssertEqual(response.total, 0)
+    }
+
     func testAutocompleteBuildsQueryParameters() async throws {
         let session = URLSession.mock { request in
             guard let url = request.url else { throw URLError(.badURL) }
@@ -391,10 +401,10 @@ final class MetClientTests: XCTestCase {
         }
 
         let client = MetClient(session: session)
-        let response = try await client.objectIDs(for: ObjectQuery(metadataDate: metadataDate))
+        let response = try await client.relatedObjectIDs(for: 123)
 
-        XCTAssertEqual(response.objectIDs, [])
-        XCTAssertEqual(response.total, 0)
+        XCTAssertEqual(response.objectIDs, [4, 5])
+        XCTAssertEqual(response.total, 2)
     }
 }
 
