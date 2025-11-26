@@ -20,16 +20,46 @@ public final class MetClient {
 
     public let baseURL: URL
     private let session: URLSession
-    private let decoder: JSONDecoder
+
+    public struct DecodingStrategies {
+        public var dateDecodingStrategy: JSONDecoder.DateDecodingStrategy
+        public var dataDecodingStrategy: JSONDecoder.DataDecodingStrategy
+        public var nonConformingFloatDecodingStrategy: JSONDecoder.NonConformingFloatDecodingStrategy
+        public var keyDecodingStrategy: JSONDecoder.KeyDecodingStrategy
+
+        public init(
+            dateDecodingStrategy: JSONDecoder.DateDecodingStrategy = .deferredToDate,
+            dataDecodingStrategy: JSONDecoder.DataDecodingStrategy = .base64,
+            nonConformingFloatDecodingStrategy: JSONDecoder.NonConformingFloatDecodingStrategy = .throw,
+            keyDecodingStrategy: JSONDecoder.KeyDecodingStrategy = .useDefaultKeys
+        ) {
+            self.dateDecodingStrategy = dateDecodingStrategy
+            self.dataDecodingStrategy = dataDecodingStrategy
+            self.nonConformingFloatDecodingStrategy = nonConformingFloatDecodingStrategy
+            self.keyDecodingStrategy = keyDecodingStrategy
+        }
+    }
+
+    public let decoder: JSONDecoder
 
     public init(
         baseURL: URL = URL(string: "https://collectionapi.metmuseum.org/public/collection/v1")!,
         session: URLSession = .shared,
-        decoder: JSONDecoder = JSONDecoder()
+        decoder: JSONDecoder? = nil,
+        decodingStrategies: DecodingStrategies = DecodingStrategies()
     ) {
         self.baseURL = baseURL
         self.session = session
-        self.decoder = decoder
+        if let decoder {
+            self.decoder = decoder
+        } else {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = decodingStrategies.dateDecodingStrategy
+            decoder.dataDecodingStrategy = decodingStrategies.dataDecodingStrategy
+            decoder.nonConformingFloatDecodingStrategy = decodingStrategies.nonConformingFloatDecodingStrategy
+            decoder.keyDecodingStrategy = decodingStrategies.keyDecodingStrategy
+            self.decoder = decoder
+        }
     }
 
     public func objectIDs(for query: ObjectQuery = ObjectQuery()) async throws -> ObjectIDsResponse {
@@ -48,9 +78,20 @@ public final class MetClient {
         return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
+    public func autocomplete(_ searchTerm: String) async throws -> [String] {
+        let url = try buildURL(path: "search/autocomplete", queryItems: [URLQueryItem(name: "q", value: searchTerm)])
+        let response = try await fetch(url: url, as: AutocompleteResponse.self)
+        return response.terms
+    }
+
     public func object(id: Int) async throws -> MetObject {
         let url = try buildURL(path: "objects/\(id)")
         return try await fetch(url: url, as: MetObject.self)
+    }
+
+    public func relatedObjectIDs(for objectID: Int) async throws -> ObjectIDsResponse {
+        let url = try buildURL(path: "objects/\(objectID)/related")
+        return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
     public func allObjects(concurrentRequests: Int = 6) -> AsyncThrowingStream<MetObject, Error> {
