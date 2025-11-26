@@ -51,6 +51,22 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(object.tags?.first?.term, "Ceramics")
     }
 
+    func testDecodesDepartmentsResponse() throws {
+        let json = """
+        {
+          "departments": [
+            {"departmentId": 1, "displayName": "First"},
+            {"departmentId": 2, "displayName": "Second"}
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let response = try JSONDecoder().decode(DepartmentsResponse.self, from: json)
+        XCTAssertEqual(response.departments.count, 2)
+        XCTAssertEqual(response.departments.first?.displayName, "First")
+        XCTAssertEqual(response.departments.last?.departmentId, 2)
+    }
+
     func testStreamsObjectsForAllIDs() async throws {
         let ids = [4, 5, 6]
         let session = URLSession.mock(respondingWith: { request in
@@ -103,6 +119,43 @@ final class MetClientTests: XCTestCase {
         }
 
         XCTAssertEqual(streamedIDs, Set(ids))
+    }
+
+    func testFetchesDepartments() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertEqual(url.absoluteString, "https://collectionapi.metmuseum.org/public/collection/v1/departments")
+            let response = DepartmentsResponse(departments: [Department(departmentId: 1, displayName: "European Paintings")])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let departments = try await client.departments()
+
+        XCTAssertEqual(departments, [Department(departmentId: 1, displayName: "European Paintings")])
+    }
+
+    func testSearchBuildsQueryParameters() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/public/collection/v1/search")
+
+            let queryItems = components?.queryItems ?? []
+            let parameters = Dictionary(uniqueKeysWithValues: queryItems.map { ($0.name, $0.value) })
+            XCTAssertEqual(parameters["q"], "flowers")
+            XCTAssertEqual(parameters["departmentId"], "5")
+            XCTAssertEqual(parameters["hasImages"], "true")
+
+            let response = ObjectIDsResponse(total: 1, objectIDs: [42])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let response = try await client.search(SearchQuery(searchTerm: "flowers", hasImages: true, departmentId: 5))
+
+        XCTAssertEqual(response.objectIDs, [42])
+        XCTAssertEqual(response.total, 1)
     }
 }
 

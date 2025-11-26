@@ -29,3 +29,10 @@ let ids = try await client.objectIDs(for: ObjectQuery(departmentIds: [6], hasIma
 ```
 
 `allObjects` fetches the full list of identifiers first and then downloads detailed records in configurable parallel batches, making it suitable for downloading the full collection for offline analysis or caching.
+
+Fetch departments or search directly:
+
+```swift
+let departments = try await client.departments()
+let searchResults = try await client.search(SearchQuery(searchTerm: "flowers", departmentId: 5, hasImages: true))
+```
