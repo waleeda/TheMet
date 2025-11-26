@@ -28,6 +28,20 @@ Filter object identifiers using optional parameters:
 let ids = try await client.objectIDs(for: ObjectQuery(departmentIds: [6], hasImages: true)).objectIDs
 ```
 
+You can also reuse search-style filters on the lighter objects endpoint without switching query types:
+
+```swift
+let query = ObjectQuery(
+    searchQuery: "flowers",
+    isHighlight: true,
+    medium: "Oil",
+    dateBegin: 1800,
+    dateEnd: 1900
+)
+
+let highlightedPaintings = try await client.objectIDs(for: query).objectIDs
+```
+
 `allObjects` fetches the full list of identifiers first and then downloads detailed records in configurable parallel batches, making it suitable for downloading the full collection for offline analysis or caching.
 
 You can also monitor progress or cancel long-running streams. The streaming helpers accept a `progress` callback and an optional `CooperativeCancellation` so you can stop fetching when your UI dismisses:
