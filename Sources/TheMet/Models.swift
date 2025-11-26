@@ -14,26 +14,6 @@ public struct AutocompleteResponse: Codable, Equatable {
     public let terms: [String]
 }
 
-public struct StreamProgress: Equatable {
-    public let completed: Int
-    public let total: Int
-
-    public init(completed: Int, total: Int) {
-        self.completed = completed
-        self.total = total
-    }
-}
-
-public struct CooperativeCancellation {
-    private let isCancelledHandler: @Sendable () -> Bool
-
-    public init(isCancelled: @escaping @Sendable () -> Bool) {
-        self.isCancelledHandler = isCancelled
-    }
-
-    public var isCancelled: Bool { isCancelledHandler() }
-}
-
 public struct Department: Codable, Equatable {
     public let departmentId: Int
     public let displayName: String
@@ -43,11 +23,18 @@ public struct ObjectQuery: Equatable {
     public var departmentIds: [Int]?
     public var hasImages: Bool?
     public var searchQuery: String?
+    public var metadataDate: Date?
 
-    public init(departmentIds: [Int]? = nil, hasImages: Bool? = nil, searchQuery: String? = nil) {
+    public init(
+        departmentIds: [Int]? = nil,
+        hasImages: Bool? = nil,
+        searchQuery: String? = nil,
+        metadataDate: Date? = nil
+    ) {
         self.departmentIds = departmentIds
         self.hasImages = hasImages
         self.searchQuery = searchQuery
+        self.metadataDate = metadataDate
     }
 
     var queryItems: [URLQueryItem] {
@@ -62,8 +49,20 @@ public struct ObjectQuery: Equatable {
         if let searchQuery, !searchQuery.isEmpty {
             items.append(URLQueryItem(name: "q", value: searchQuery))
         }
+        if let metadataDate {
+            let dateString = Self.metadataDateFormatter.string(from: metadataDate)
+            items.append(URLQueryItem(name: "metadataDate", value: dateString))
+        }
         return items
     }
+
+    private static let metadataDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
 }
 
 public struct SearchQuery: Equatable {

@@ -94,11 +94,7 @@ public final class MetClient {
         return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
-    public func allObjects(
-        concurrentRequests: Int = 6,
-        progress: (@Sendable (StreamProgress) -> Void)? = nil,
-        cancellation: CooperativeCancellation? = nil
-    ) -> AsyncThrowingStream<MetObject, Error> {
+    public func allObjects(concurrentRequests: Int = 6) -> AsyncThrowingStream<MetObject, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
