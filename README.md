@@ -39,3 +39,22 @@ let searchResults = try await client.search(SearchQuery(searchTerm: "flowers", d
 let suggestions = try await client.autocomplete("sun")
 let related = try await client.relatedObjectIDs(for: 123).objectIDs
 ```
+
+### Custom JSON decoding strategies
+
+If your project requires specific decoding behavior (for example, ISO 8601 dates or custom floating-point formatting), you can configure the decoder used by `MetClient` without building it yourself:
+
+```swift
+let client = MetClient(
+    decodingStrategies: .init(
+        dateDecodingStrategy: .iso8601,
+        nonConformingFloatDecodingStrategy: .convertFromString(
+            positiveInfinity: "INF",
+            negativeInfinity: "-INF",
+            nan: "NaN"
+        )
+    )
+)
+
+let ids = try await client.objectIDs(for: ObjectQuery(hasImages: true))
+```

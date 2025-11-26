@@ -76,6 +76,71 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.terms, ["sun", "sunflower", "sunset"])
     }
 
+    func testConfiguresDecoderStrategiesWhenNoCustomDecoderProvided() throws {
+        let client = MetClient(
+            decodingStrategies: .init(
+                dateDecodingStrategy: .iso8601,
+                dataDecodingStrategy: .deferredToData,
+                nonConformingFloatDecodingStrategy: .convertFromString(
+                    positiveInfinity: "INF",
+                    negativeInfinity: "-INF",
+                    nan: "NaN"
+                ),
+                keyDecodingStrategy: .convertFromSnakeCase
+            )
+        )
+
+        switch client.decoder.dateDecodingStrategy {
+        case .iso8601:
+            break
+        default:
+            XCTFail("Expected ISO8601 date decoding strategy")
+        }
+
+        switch client.decoder.dataDecodingStrategy {
+        case .deferredToData:
+            break
+        default:
+            XCTFail("Expected deferredToData decoding strategy")
+        }
+
+        switch client.decoder.nonConformingFloatDecodingStrategy {
+        case .convertFromString(positiveInfinity: "INF", negativeInfinity: "-INF", nan: "NaN"):
+            break
+        default:
+            XCTFail("Expected custom non-conforming float decoding strategy")
+        }
+
+        switch client.decoder.keyDecodingStrategy {
+        case .convertFromSnakeCase:
+            break
+        default:
+            XCTFail("Expected convertFromSnakeCase decoding strategy")
+        }
+    }
+
+    func testUsesInjectedDecoderDirectlyWhenProvided() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let client = MetClient(decoder: decoder, decodingStrategies: .init(dateDecodingStrategy: .iso8601))
+
+        switch client.decoder.dateDecodingStrategy {
+        case .secondsSince1970:
+            break
+        default:
+            XCTFail("Injected decoder should not be overridden")
+        }
+
+        switch client.decoder.keyDecodingStrategy {
+        case .convertFromSnakeCase:
+            break
+        default:
+            XCTFail("Injected decoder should retain its key decoding strategy")
+        }
+    }
+
     func testStreamsObjectsForAllIDs() async throws {
         let ids = [4, 5, 6]
         let session = URLSession.mock(respondingWith: { request in
