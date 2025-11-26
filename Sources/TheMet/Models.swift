@@ -10,6 +10,30 @@ public struct DepartmentsResponse: Codable, Equatable {
     public let departments: [Department]
 }
 
+public struct AutocompleteResponse: Codable, Equatable {
+    public let terms: [String]
+}
+
+public struct StreamProgress: Equatable {
+    public let completed: Int
+    public let total: Int
+
+    public init(completed: Int, total: Int) {
+        self.completed = completed
+        self.total = total
+    }
+}
+
+public struct CooperativeCancellation {
+    private let isCancelledHandler: @Sendable () -> Bool
+
+    public init(isCancelled: @escaping @Sendable () -> Bool) {
+        self.isCancelledHandler = isCancelled
+    }
+
+    public var isCancelled: Bool { isCancelledHandler() }
+}
+
 public struct Department: Codable, Equatable {
     public let departmentId: Int
     public let displayName: String

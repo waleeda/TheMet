@@ -67,6 +67,80 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.departments.last?.departmentId, 2)
     }
 
+    func testDecodesAutocompleteResponse() throws {
+        let json = """
+        {"terms":["sun","sunflower","sunset"]}
+        """.data(using: .utf8)!
+
+        let response = try JSONDecoder().decode(AutocompleteResponse.self, from: json)
+        XCTAssertEqual(response.terms, ["sun", "sunflower", "sunset"])
+    }
+
+    func testConfiguresDecoderStrategiesWhenNoCustomDecoderProvided() throws {
+        let client = MetClient(
+            decodingStrategies: .init(
+                dateDecodingStrategy: .iso8601,
+                dataDecodingStrategy: .deferredToData,
+                nonConformingFloatDecodingStrategy: .convertFromString(
+                    positiveInfinity: "INF",
+                    negativeInfinity: "-INF",
+                    nan: "NaN"
+                ),
+                keyDecodingStrategy: .convertFromSnakeCase
+            )
+        )
+
+        switch client.decoder.dateDecodingStrategy {
+        case .iso8601:
+            break
+        default:
+            XCTFail("Expected ISO8601 date decoding strategy")
+        }
+
+        switch client.decoder.dataDecodingStrategy {
+        case .deferredToData:
+            break
+        default:
+            XCTFail("Expected deferredToData decoding strategy")
+        }
+
+        switch client.decoder.nonConformingFloatDecodingStrategy {
+        case .convertFromString(positiveInfinity: "INF", negativeInfinity: "-INF", nan: "NaN"):
+            break
+        default:
+            XCTFail("Expected custom non-conforming float decoding strategy")
+        }
+
+        switch client.decoder.keyDecodingStrategy {
+        case .convertFromSnakeCase:
+            break
+        default:
+            XCTFail("Expected convertFromSnakeCase decoding strategy")
+        }
+    }
+
+    func testUsesInjectedDecoderDirectlyWhenProvided() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let client = MetClient(decoder: decoder, decodingStrategies: .init(dateDecodingStrategy: .iso8601))
+
+        switch client.decoder.dateDecodingStrategy {
+        case .secondsSince1970:
+            break
+        default:
+            XCTFail("Injected decoder should not be overridden")
+        }
+
+        switch client.decoder.keyDecodingStrategy {
+        case .convertFromSnakeCase:
+            break
+        default:
+            XCTFail("Injected decoder should retain its key decoding strategy")
+        }
+    }
+
     func testStreamsObjectsForAllIDs() async throws {
         let ids = [4, 5, 6]
         let session = URLSession.mock(respondingWith: { request in
@@ -121,6 +195,120 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(streamedIDs, Set(ids))
     }
 
+    func testReportsProgressWhileStreamingObjects() async throws {
+        let ids = [1, 2, 3]
+        let session = URLSession.mock(respondingWith: { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            guard let id = Int(url.lastPathComponent) else { throw URLError(.unsupportedURL) }
+            let object = MetObject(
+                objectID: id,
+                isHighlight: nil,
+                accessionNumber: nil,
+                accessionYear: nil,
+                primaryImage: nil,
+                primaryImageSmall: nil,
+                department: nil,
+                objectName: nil,
+                title: "Object #\(id)",
+                culture: nil,
+                period: nil,
+                dynasty: nil,
+                reign: nil,
+                portfolio: nil,
+                artistDisplayName: nil,
+                artistDisplayBio: nil,
+                objectDate: nil,
+                medium: nil,
+                dimensions: nil,
+                creditLine: nil,
+                geographyType: nil,
+                city: nil,
+                state: nil,
+                county: nil,
+                country: nil,
+                classification: nil,
+                objectURL: nil,
+                tags: nil
+            )
+            return try JSONEncoder().encode(object)
+        })
+
+        let client = MetClient(session: session)
+        let progressCollector = ProgressCollector()
+        var streamedIDs: [Int] = []
+
+        for try await object in client.objects(ids: ids, concurrentRequests: 2, progress: { progress in
+            progressCollector.append(progress)
+        }) {
+            streamedIDs.append(object.objectID)
+        }
+
+        let progressUpdates = progressCollector.snapshot()
+
+        XCTAssertEqual(streamedIDs.sorted(), ids)
+        XCTAssertEqual(progressUpdates.map(\.completed), [1, 2, 3])
+        XCTAssertEqual(progressUpdates.map(\.total), Array(repeating: ids.count, count: ids.count))
+    }
+
+    func testStopsStreamingWhenCancelled() async throws {
+        let ids = [10, 11, 12]
+        let session = URLSession.mock(respondingWith: { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            guard let id = Int(url.lastPathComponent) else { throw URLError(.unsupportedURL) }
+            let object = MetObject(
+                objectID: id,
+                isHighlight: nil,
+                accessionNumber: nil,
+                accessionYear: nil,
+                primaryImage: nil,
+                primaryImageSmall: nil,
+                department: nil,
+                objectName: nil,
+                title: "Object #\(id)",
+                culture: nil,
+                period: nil,
+                dynasty: nil,
+                reign: nil,
+                portfolio: nil,
+                artistDisplayName: nil,
+                artistDisplayBio: nil,
+                objectDate: nil,
+                medium: nil,
+                dimensions: nil,
+                creditLine: nil,
+                geographyType: nil,
+                city: nil,
+                state: nil,
+                county: nil,
+                country: nil,
+                classification: nil,
+                objectURL: nil,
+                tags: nil
+            )
+            return try JSONEncoder().encode(object)
+        })
+
+        let client = MetClient(session: session)
+        var streamedIDs: [Int] = []
+        let cancellationFlag = CancellationFlag()
+
+        do {
+            for try await object in client.objects(
+                ids: ids,
+                concurrentRequests: 1,
+                cancellation: CooperativeCancellation { cancellationFlag.value }
+            ) {
+                streamedIDs.append(object.objectID)
+                cancellationFlag.cancel()
+            }
+            XCTFail("Expected stream to cancel after the first object")
+        } catch is CancellationError {
+            // Expected cancellation
+        }
+
+        XCTAssertEqual(streamedIDs, [10])
+    }
+
     func testFetchesDepartments() async throws {
         let session = URLSession.mock { request in
             guard let url = request.url else { throw URLError(.badURL) }
@@ -156,6 +344,39 @@ final class MetClientTests: XCTestCase {
 
         XCTAssertEqual(response.objectIDs, [42])
         XCTAssertEqual(response.total, 1)
+    }
+
+    func testAutocompleteBuildsQueryParameters() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/public/collection/v1/search/autocomplete")
+            let parameters = Dictionary(uniqueKeysWithValues: (components?.queryItems ?? []).map { ($0.name, $0.value) })
+            XCTAssertEqual(parameters["q"], "sun")
+
+            let response = AutocompleteResponse(terms: ["sun", "sunflower"])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let terms = try await client.autocomplete("sun")
+
+        XCTAssertEqual(terms, ["sun", "sunflower"])
+    }
+
+    func testFetchesRelatedObjectIDs() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertEqual(url.absoluteString, "https://collectionapi.metmuseum.org/public/collection/v1/objects/123/related")
+            let response = ObjectIDsResponse(total: 2, objectIDs: [4, 5])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let response = try await client.relatedObjectIDs(for: 123)
+
+        XCTAssertEqual(response.objectIDs, [4, 5])
+        XCTAssertEqual(response.total, 2)
     }
 }
 
@@ -199,5 +420,41 @@ private extension URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [URLProtocolMock.self]
         return URLSession(configuration: configuration)
+    }
+}
+
+private final class ProgressCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var updates: [StreamProgress] = []
+
+    func append(_ progress: StreamProgress) {
+        lock.lock()
+        updates.append(progress)
+        lock.unlock()
+    }
+
+    func snapshot() -> [StreamProgress] {
+        lock.lock()
+        let result = updates
+        lock.unlock()
+        return result
+    }
+}
+
+private final class CancellationFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var value: Bool {
+        lock.lock()
+        let result = cancelled
+        lock.unlock()
+        return result
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
     }
 }

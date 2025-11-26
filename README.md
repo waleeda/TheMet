@@ -30,9 +30,47 @@ let ids = try await client.objectIDs(for: ObjectQuery(departmentIds: [6], hasIma
 
 `allObjects` fetches the full list of identifiers first and then downloads detailed records in configurable parallel batches, making it suitable for downloading the full collection for offline analysis or caching.
 
+You can also monitor progress or cancel long-running streams. The streaming helpers accept a `progress` callback and an optional `CooperativeCancellation` so you can stop fetching when your UI dismisses:
+
+```swift
+var shouldCancel = false
+
+for try await object in client.allObjects(
+    concurrentRequests: 8,
+    progress: { progress in
+        print("Finished \(progress.completed) of \(progress.total)")
+    },
+    cancellation: CooperativeCancellation { shouldCancel }
+) {
+    if object.objectID == 1000 { shouldCancel = true }
+}
+```
+
 Fetch departments or search directly:
 
 ```swift
 let departments = try await client.departments()
 let searchResults = try await client.search(SearchQuery(searchTerm: "flowers", departmentId: 5, hasImages: true))
+
+let suggestions = try await client.autocomplete("sun")
+let related = try await client.relatedObjectIDs(for: 123).objectIDs
+```
+
+### Custom JSON decoding strategies
+
+If your project requires specific decoding behavior (for example, ISO 8601 dates or custom floating-point formatting), you can configure the decoder used by `MetClient` without building it yourself:
+
+```swift
+let client = MetClient(
+    decodingStrategies: .init(
+        dateDecodingStrategy: .iso8601,
+        nonConformingFloatDecodingStrategy: .convertFromString(
+            positiveInfinity: "INF",
+            negativeInfinity: "-INF",
+            nan: "NaN"
+        )
+    )
+)
+
+let ids = try await client.objectIDs(for: ObjectQuery(hasImages: true))
 ```

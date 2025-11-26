@@ -20,16 +20,46 @@ public final class MetClient {
 
     public let baseURL: URL
     private let session: URLSession
-    private let decoder: JSONDecoder
+
+    public struct DecodingStrategies {
+        public var dateDecodingStrategy: JSONDecoder.DateDecodingStrategy
+        public var dataDecodingStrategy: JSONDecoder.DataDecodingStrategy
+        public var nonConformingFloatDecodingStrategy: JSONDecoder.NonConformingFloatDecodingStrategy
+        public var keyDecodingStrategy: JSONDecoder.KeyDecodingStrategy
+
+        public init(
+            dateDecodingStrategy: JSONDecoder.DateDecodingStrategy = .deferredToDate,
+            dataDecodingStrategy: JSONDecoder.DataDecodingStrategy = .base64,
+            nonConformingFloatDecodingStrategy: JSONDecoder.NonConformingFloatDecodingStrategy = .throw,
+            keyDecodingStrategy: JSONDecoder.KeyDecodingStrategy = .useDefaultKeys
+        ) {
+            self.dateDecodingStrategy = dateDecodingStrategy
+            self.dataDecodingStrategy = dataDecodingStrategy
+            self.nonConformingFloatDecodingStrategy = nonConformingFloatDecodingStrategy
+            self.keyDecodingStrategy = keyDecodingStrategy
+        }
+    }
+
+    public let decoder: JSONDecoder
 
     public init(
         baseURL: URL = URL(string: "https://collectionapi.metmuseum.org/public/collection/v1")!,
         session: URLSession = .shared,
-        decoder: JSONDecoder = JSONDecoder()
+        decoder: JSONDecoder? = nil,
+        decodingStrategies: DecodingStrategies = DecodingStrategies()
     ) {
         self.baseURL = baseURL
         self.session = session
-        self.decoder = decoder
+        if let decoder {
+            self.decoder = decoder
+        } else {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = decodingStrategies.dateDecodingStrategy
+            decoder.dataDecodingStrategy = decodingStrategies.dataDecodingStrategy
+            decoder.nonConformingFloatDecodingStrategy = decodingStrategies.nonConformingFloatDecodingStrategy
+            decoder.keyDecodingStrategy = decodingStrategies.keyDecodingStrategy
+            self.decoder = decoder
+        }
     }
 
     public func objectIDs(for query: ObjectQuery = ObjectQuery()) async throws -> ObjectIDsResponse {
@@ -48,35 +78,80 @@ public final class MetClient {
         return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
+    public func autocomplete(_ searchTerm: String) async throws -> [String] {
+        let url = try buildURL(path: "search/autocomplete", queryItems: [URLQueryItem(name: "q", value: searchTerm)])
+        let response = try await fetch(url: url, as: AutocompleteResponse.self)
+        return response.terms
+    }
+
     public func object(id: Int) async throws -> MetObject {
         let url = try buildURL(path: "objects/\(id)")
         return try await fetch(url: url, as: MetObject.self)
     }
 
-    public func allObjects(concurrentRequests: Int = 6) -> AsyncThrowingStream<MetObject, Error> {
+    public func relatedObjectIDs(for objectID: Int) async throws -> ObjectIDsResponse {
+        let url = try buildURL(path: "objects/\(objectID)/related")
+        return try await fetch(url: url, as: ObjectIDsResponse.self)
+    }
+
+    public func allObjects(
+        concurrentRequests: Int = 6,
+        progress: (@Sendable (StreamProgress) -> Void)? = nil,
+        cancellation: CooperativeCancellation? = nil
+    ) -> AsyncThrowingStream<MetObject, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
+                    try checkCancellation(cancellation)
                     let idsResponse = try await objectIDs()
+                    try checkCancellation(cancellation)
                     let ids = idsResponse.objectIDs
-                    try await streamObjects(ids: ids, concurrentRequests: concurrentRequests, continuation: continuation)
+                    try await streamObjects(
+                        ids: ids,
+                        concurrentRequests: concurrentRequests,
+                        totalCount: ids.count,
+                        progress: progress,
+                        cancellation: cancellation,
+                        continuation: continuation
+                    )
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }
             }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
         }
     }
 
-    public func objects(ids: [Int], concurrentRequests: Int = 6) -> AsyncThrowingStream<MetObject, Error> {
+    public func objects(
+        ids: [Int],
+        concurrentRequests: Int = 6,
+        progress: (@Sendable (StreamProgress) -> Void)? = nil,
+        cancellation: CooperativeCancellation? = nil
+    ) -> AsyncThrowingStream<MetObject, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
-                    try await streamObjects(ids: ids, concurrentRequests: concurrentRequests, continuation: continuation)
+                    try checkCancellation(cancellation)
+                    try await streamObjects(
+                        ids: ids,
+                        concurrentRequests: concurrentRequests,
+                        totalCount: ids.count,
+                        progress: progress,
+                        cancellation: cancellation,
+                        continuation: continuation
+                    )
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
             }
         }
     }
@@ -84,27 +159,55 @@ public final class MetClient {
     private func streamObjects(
         ids: [Int],
         concurrentRequests: Int,
+        totalCount: Int,
+        progress: (@Sendable (StreamProgress) -> Void)?,
+        cancellation: CooperativeCancellation?,
         continuation: AsyncThrowingStream<MetObject, Error>.Continuation
     ) async throws {
         let clampedConcurrency = max(1, concurrentRequests)
         var index = 0
+        var completed = 0
+
         while index < ids.count {
+            try checkCancellation(cancellation)
             let upperBound = min(ids.count, index + clampedConcurrency)
             let slice = ids[index..<upperBound]
             try await withThrowingTaskGroup(of: MetObject?.self) { group in
                 for id in slice {
                     group.addTask { [weak self] in
                         guard let self else { return nil }
+                        try Task.checkCancellation()
                         return try await self.object(id: id)
                     }
                 }
-                for try await object in group {
-                    if let object {
-                        continuation.yield(object)
+
+                do {
+                    for try await object in group {
+                        if cancellation?.isCancelled == true || Task.isCancelled {
+                            group.cancelAll()
+                            throw CancellationError()
+                        }
+
+                        if let object {
+                            continuation.yield(object)
+                            completed += 1
+                            progress?(StreamProgress(completed: completed, total: totalCount))
+                        }
                     }
+                } catch {
+                    group.cancelAll()
+                    throw error
                 }
             }
             index = upperBound
+        }
+
+        try checkCancellation(cancellation)
+    }
+
+    private func checkCancellation(_ cancellation: CooperativeCancellation?) throws {
+        if Task.isCancelled || cancellation?.isCancelled == true {
+            throw CancellationError()
         }
     }
 
