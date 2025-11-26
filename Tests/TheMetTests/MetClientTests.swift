@@ -76,6 +76,46 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.terms, ["sun", "sunflower", "sunset"])
     }
 
+    func testBuildsObjectQueryWithExtendedFilters() throws {
+        var dateComponents = DateComponents()
+        dateComponents.calendar = Calendar(identifier: .gregorian)
+        dateComponents.year = 2024
+        dateComponents.month = 1
+        dateComponents.day = 2
+        let metadataDate = try XCTUnwrap(dateComponents.date)
+
+        let query = ObjectQuery(
+            departmentIds: [1, 2],
+            hasImages: true,
+            searchQuery: "flowers",
+            metadataDate: metadataDate,
+            isHighlight: true,
+            isOnView: false,
+            artistOrCulture: true,
+            medium: "Oil",
+            geoLocation: "Europe",
+            dateBegin: 1800,
+            dateEnd: 1900
+        )
+
+        let items = Dictionary<String, String>(uniqueKeysWithValues: query.queryItems.compactMap { item in
+            guard let value = item.value else { return nil }
+            return (item.name, value)
+        })
+
+        XCTAssertEqual(items["departmentIds"], "1|2")
+        XCTAssertEqual(items["hasImages"], "true")
+        XCTAssertEqual(items["q"], "flowers")
+        XCTAssertEqual(items["metadataDate"], "2024-01-02")
+        XCTAssertEqual(items["isHighlight"], "true")
+        XCTAssertEqual(items["isOnView"], "false")
+        XCTAssertEqual(items["artistOrCulture"], "true")
+        XCTAssertEqual(items["medium"], "Oil")
+        XCTAssertEqual(items["geoLocation"], "Europe")
+        XCTAssertEqual(items["dateBegin"], "1800")
+        XCTAssertEqual(items["dateEnd"], "1900")
+    }
+
     func testConfiguresDecoderStrategiesWhenNoCustomDecoderProvided() throws {
         let client = MetClient(
             decodingStrategies: .init(

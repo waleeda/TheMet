@@ -24,17 +24,38 @@ public struct ObjectQuery: Equatable {
     public var hasImages: Bool?
     public var searchQuery: String?
     public var metadataDate: Date?
+    public var isHighlight: Bool?
+    public var isOnView: Bool?
+    public var artistOrCulture: Bool?
+    public var medium: String?
+    public var geoLocation: String?
+    public var dateBegin: Int?
+    public var dateEnd: Int?
 
     public init(
         departmentIds: [Int]? = nil,
         hasImages: Bool? = nil,
         searchQuery: String? = nil,
-        metadataDate: Date? = nil
+        metadataDate: Date? = nil,
+        isHighlight: Bool? = nil,
+        isOnView: Bool? = nil,
+        artistOrCulture: Bool? = nil,
+        medium: String? = nil,
+        geoLocation: String? = nil,
+        dateBegin: Int? = nil,
+        dateEnd: Int? = nil
     ) {
         self.departmentIds = departmentIds
         self.hasImages = hasImages
         self.searchQuery = searchQuery
         self.metadataDate = metadataDate
+        self.isHighlight = isHighlight
+        self.isOnView = isOnView
+        self.artistOrCulture = artistOrCulture
+        self.medium = medium
+        self.geoLocation = geoLocation
+        self.dateBegin = dateBegin
+        self.dateEnd = dateEnd
     }
 
     var queryItems: [URLQueryItem] {
@@ -52,6 +73,27 @@ public struct ObjectQuery: Equatable {
         if let metadataDate {
             let dateString = Self.metadataDateFormatter.string(from: metadataDate)
             items.append(URLQueryItem(name: "metadataDate", value: dateString))
+        }
+        if let isHighlight {
+            items.append(URLQueryItem(name: "isHighlight", value: isHighlight ? "true" : "false"))
+        }
+        if let isOnView {
+            items.append(URLQueryItem(name: "isOnView", value: isOnView ? "true" : "false"))
+        }
+        if let artistOrCulture {
+            items.append(URLQueryItem(name: "artistOrCulture", value: artistOrCulture ? "true" : "false"))
+        }
+        if let medium, !medium.isEmpty {
+            items.append(URLQueryItem(name: "medium", value: medium))
+        }
+        if let geoLocation, !geoLocation.isEmpty {
+            items.append(URLQueryItem(name: "geoLocation", value: geoLocation))
+        }
+        if let dateBegin {
+            items.append(URLQueryItem(name: "dateBegin", value: String(dateBegin)))
+        }
+        if let dateEnd {
+            items.append(URLQueryItem(name: "dateEnd", value: String(dateEnd)))
         }
         return items
     }
