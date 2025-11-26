@@ -232,6 +232,24 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.total, 1)
     }
 
+    func testObjectIDsIncludesMetadataDateParameter() async throws {
+        var dateComponents = DateComponents()
+        dateComponents.year = 2024
+        dateComponents.month = 4
+        dateComponents.day = 10
+        dateComponents.calendar = Calendar(identifier: .gregorian)
+        let metadataDate = dateComponents.date!
+
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/public/collection/v1/objects")
+
+            let queryItems = components?.queryItems ?? []
+            let parameters = Dictionary(uniqueKeysWithValues: queryItems.map { ($0.name, $0.value) })
+            XCTAssertEqual(parameters["metadataDate"], "2024-04-10")
+
+            let response = ObjectIDsResponse(total: 0, objectIDs: [])
     func testAutocompleteBuildsQueryParameters() async throws {
         let session = URLSession.mock { request in
             guard let url = request.url else { throw URLError(.badURL) }
@@ -259,10 +277,10 @@ final class MetClientTests: XCTestCase {
         }
 
         let client = MetClient(session: session)
-        let response = try await client.relatedObjectIDs(for: 123)
+        let response = try await client.objectIDs(for: ObjectQuery(metadataDate: metadataDate))
 
-        XCTAssertEqual(response.objectIDs, [4, 5])
-        XCTAssertEqual(response.total, 2)
+        XCTAssertEqual(response.objectIDs, [])
+        XCTAssertEqual(response.total, 0)
     }
 }
 
