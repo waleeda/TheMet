@@ -10,6 +10,10 @@ public struct DepartmentsResponse: Codable, Equatable {
     public let departments: [Department]
 }
 
+public struct AutocompleteResponse: Codable, Equatable {
+    public let terms: [String]
+}
+
 public struct Department: Codable, Equatable {
     public let departmentId: Int
     public let displayName: String
