@@ -118,6 +118,32 @@ for try await object in client.allObjects(pageSize: 100, concurrentRequests: 4, 
 }
 ```
 
+### Cross-museum browsing
+
+Prefer a single toggle between the Met and the National Gallery of Art? Use `CrossMuseumClient` to pick a source while keeping a consistent API for listing IDs, searching, fetching objects, or streaming entire collections:
+
+```swift
+import TheMet
+
+var client = CrossMuseumClient()
+
+// Start with The Met
+let metSearch = try await client.search(.met(SearchQuery(searchTerm: "sunflowers")))
+print(metSearch.objectIDs)
+
+// Toggle to the National Gallery of Art
+client.source = .nationalGallery
+let ngaIDs = try await client.objectIDs(for: .nationalGallery(.init(hasImages: true, pageSize: 10)))
+print(ngaIDs.total)
+
+// Stream objects from the active museum
+for try await object in client.allObjects(concurrentRequests: 4, progress: { progress in
+    print("Finished \(progress.completed) of \(progress.total)")
+}) {
+    print(object)
+}
+```
+
 ### Custom JSON decoding strategies
 
 If your project requires specific decoding behavior (for example, ISO 8601 dates or custom floating-point formatting), you can configure the decoder used by `MetClient` without building it yourself:
