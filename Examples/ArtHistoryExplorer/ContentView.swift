@@ -13,6 +13,9 @@ struct ContentView: View {
             SearchScreen(viewModel: searchViewModel)
                 .tabItem { Label("Discover", systemImage: "magnifyingglass") }
 
+            DepartmentExplorerScreen()
+                .tabItem { Label("Departments", systemImage: "folder") }
+
             LessonsScreen(lessons: timelineViewModel.lessons)
                 .tabItem { Label("Lessons", systemImage: "book") }
         }

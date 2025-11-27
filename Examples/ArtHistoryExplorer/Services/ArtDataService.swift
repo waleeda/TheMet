@@ -29,6 +29,39 @@ public struct ArtDataService {
         try await metClient.departments()
     }
 
+    public func metObjectIDs(for department: Department) async throws -> ObjectIDsResponse {
+        try await metClient.objectIDs(for: ObjectQuery(departmentIds: [department.departmentId], hasImages: true))
+    }
+
+    public func metObjects(for ids: [Int]) async throws -> [CombinedSearchResult] {
+        let indexedIDs = Array(ids.enumerated())
+
+        return try await withThrowingTaskGroup(of: (Int, CombinedSearchResult)?.self) { group in
+            for (index, id) in indexedIDs {
+                group.addTask {
+                    let object = try await metClient.object(id: id)
+                    let result = CombinedSearchResult(
+                        title: object.title ?? "Untitled",
+                        subtitle: object.artistDisplayName ?? "Unknown artist",
+                        museum: "The Met",
+                        imageURL: URL(string: object.primaryImageSmall ?? object.primaryImage ?? ""),
+                        source: .met(id: object.objectID)
+                    )
+                    return (index, result)
+                }
+            }
+
+            var results: [(Int, CombinedSearchResult)] = []
+            for try await result in group {
+                if let result { results.append(result) }
+            }
+
+            return results
+                .sorted { $0.0 < $1.0 }
+                .map { $0.1 }
+        }
+    }
+
     public func suggestions(for term: String) async throws -> [String] {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 3 else { return [] }
