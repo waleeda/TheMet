@@ -191,6 +191,30 @@ for try await object in harvard.allObjects(query: HarvardObjectQuery(period: "Re
 }
 ```
 
+## Europeana cultural heritage search
+
+Search the federated Europeana catalog with built-in facets for provider, media type, and year while automatically favoring IIIF image links when present:
+
+```swift
+import TheMet
+
+let europeana = EuropeanaClient()
+
+let response = try await europeana.search(
+    EuropeanaSearchQuery(
+        searchTerm: "art nouveau",
+        provider: "Europeana Fashion Association",
+        mediaType: .image,
+        year: "1905"
+    )
+)
+
+if let first = response.items.first {
+    print(first.title ?? "Untitled")
+    print(first.bestImageURL?.absoluteString ?? "No image")
+}
+```
+
 ### Custom JSON decoding strategies
 
 If your project requires specific decoding behavior (for example, ISO 8601 dates or custom floating-point formatting), you can configure the decoder used by `MetClient` without building it yourself:
