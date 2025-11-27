@@ -1,4 +1,5 @@
 import SwiftUI
+import TheMet
 
 struct ContentView: View {
     @EnvironmentObject private var timelineViewModel: ArtTimelineViewModel
@@ -86,6 +87,8 @@ struct SearchScreen: View {
                     }
                     .onSubmit { viewModel.search() }
 
+                FilterControls(filters: $viewModel.filters, departments: viewModel.departments, onReset: viewModel.resetFilters)
+
                 if viewModel.isLoading {
                     ProgressView()
                 }
@@ -128,6 +131,7 @@ struct SearchScreen: View {
             }
             .padding()
             .navigationTitle("Discover Museums")
+            .task { viewModel.loadDepartments() }
         }
     }
 }
@@ -188,5 +192,72 @@ struct LessonsScreen: View {
             }
             .navigationTitle("Lessons")
         }
+    }
+}
+
+struct FilterControls: View {
+    @Binding var filters: SearchFilters
+    let departments: [Department]
+    var onReset: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Filters")
+                    .font(.headline)
+                Spacer()
+                Button("Reset") {
+                    onReset()
+                }
+                .buttonStyle(.borderless)
+            }
+
+            Picker("Department", selection: $filters.departmentId) {
+                Text("Any department").tag(Optional<Int>.none)
+                ForEach(departments, id: \.departmentId) { department in
+                    Text(department.displayName).tag(Optional(department.departmentId))
+                }
+            }
+            .pickerStyle(.menu)
+
+            Toggle("Images only", isOn: $filters.requiresImages)
+            Toggle("Highlights only", isOn: $filters.highlightsOnly)
+            Toggle("On view only", isOn: $filters.onViewOnly)
+            Toggle("Artist or culture emphasis", isOn: $filters.artistOrCultureOnly)
+
+            VStack(alignment: .leading) {
+                Text("Medium")
+                    .font(.subheadline)
+                TextField("e.g., Oil on canvas", text: $filters.medium)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading) {
+                Text("Geography")
+                    .font(.subheadline)
+                TextField("e.g., France|Italy", text: $filters.geoLocation)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Start year")
+                        .font(.subheadline)
+                    TextField("1200", text: $filters.dateBegin)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading) {
+                    Text("End year")
+                        .font(.subheadline)
+                    TextField("1900", text: $filters.dateEnd)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
     }
 }
