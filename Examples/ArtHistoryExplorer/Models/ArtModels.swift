@@ -68,4 +68,5 @@ public struct ArtworkDetail: Identifiable, Equatable {
     public let objectURL: URL?
     public let imageURL: URL?
     public let source: ArtworkSource
+    public let history: ArtworkHistory
 }

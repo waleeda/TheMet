@@ -111,6 +111,8 @@ public struct ArtDataService {
                 }
                 .joined(separator: ", ")
 
+            let history = ArtworkHistoryBuilder.makeHistory(for: object)
+
             return ArtworkDetail(
                 title: object.title ?? "Untitled",
                 artist: object.artistDisplayName?.isEmpty == false ? object.artistDisplayName! : "Unknown artist",
@@ -128,10 +130,13 @@ public struct ArtDataService {
                 tags: object.tags?.map(\.term) ?? [],
                 objectURL: URL(string: object.objectURL ?? ""),
                 imageURL: URL(string: object.primaryImageSmall ?? object.primaryImage ?? ""),
-                source: .met(id: object.objectID)
+                source: .met(id: object.objectID),
+                history: history
             )
         case .nationalGallery(let id):
             let object = try await galleryClient.object(id: id)
+            let history = ArtworkHistoryBuilder.makeHistory(for: object)
+
             return ArtworkDetail(
                 title: object.title ?? "Untitled",
                 artist: object.creator ?? "Unknown artist",
@@ -149,7 +154,8 @@ public struct ArtDataService {
                 tags: [],
                 objectURL: nil,
                 imageURL: URL(string: object.image ?? ""),
-                source: .nationalGallery(id: object.id)
+                source: .nationalGallery(id: object.id),
+                history: history
             )
         }
     }
