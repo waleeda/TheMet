@@ -31,7 +31,9 @@ struct TimelineScreen: View {
                     ContentUnavailableView("Couldn’t load art", systemImage: "exclamationmark.triangle", description: Text(error))
                 } else {
                     List(viewModel.timeline) { entry in
-                        TimelineRow(entry: entry)
+                        NavigationLink(destination: ArtworkDetailView(source: entry.source)) {
+                            TimelineRow(entry: entry)
+                        }
                     }
                 }
             }
@@ -111,14 +113,18 @@ struct SearchScreen: View {
                 List {
                     Section(viewModel.results.isEmpty ? "" : "Results") {
                         ForEach(viewModel.results) { result in
-                            SearchResultRow(result: result)
+                            NavigationLink(destination: ArtworkDetailView(source: result.source)) {
+                                SearchResultRow(result: result)
+                            }
                         }
                     }
 
                     if viewModel.relatedPicks.isEmpty == false {
                         Section("Related picks from The Met") {
                             ForEach(viewModel.relatedPicks) { result in
-                                SearchResultRow(result: result)
+                                NavigationLink(destination: ArtworkDetailView(source: result.source)) {
+                                    SearchResultRow(result: result)
+                                }
                             }
                         }
                     }

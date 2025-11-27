@@ -35,7 +35,7 @@ public struct ArtDataService {
         return try await metClient.autocomplete(trimmed)
     }
 
-    public func relatedMetHighlights(for objectID: Int, limit: Int = 4) async throws -> [CombinedSearchResult] {
+    public func relatedMetObjects(for objectID: Int, limit: Int = 4) async throws -> [CombinedSearchResult] {
         let response = try await metClient.relatedObjectIDs(for: objectID)
         let ids = response.objectIDs.prefix(limit)
 
@@ -58,6 +58,41 @@ public struct ArtDataService {
                 if let result { results.append(result) }
             }
             return results
+        }
+    }
+
+    public func artworkDetail(for source: ArtworkSource) async throws -> ArtworkDetail {
+        switch source {
+        case .met(let id):
+            let object = try await metClient.object(id: id)
+            return ArtworkDetail(
+                title: object.title ?? "Untitled",
+                artist: object.artistDisplayName?.isEmpty == false ? object.artistDisplayName! : "Unknown artist",
+                museum: "The Met",
+                dateText: object.objectDate ?? "",
+                medium: object.medium ?? "",
+                culture: object.culture ?? object.dynasty ?? object.period ?? "",
+                dimensions: object.dimensions ?? "",
+                creditLine: object.creditLine ?? "",
+                description: object.classification ?? object.department ?? "",
+                imageURL: URL(string: object.primaryImageSmall ?? object.primaryImage ?? ""),
+                source: .met(id: object.objectID)
+            )
+        case .nationalGallery(let id):
+            let object = try await galleryClient.object(id: id)
+            return ArtworkDetail(
+                title: object.title ?? "Untitled",
+                artist: object.creator ?? "Unknown artist",
+                museum: "National Gallery of Art",
+                dateText: object.displayDate ?? "",
+                medium: object.medium ?? "",
+                culture: object.department ?? object.objectType ?? "",
+                dimensions: object.dimensions ?? "",
+                creditLine: "",
+                description: object.description ?? "",
+                imageURL: URL(string: object.image ?? ""),
+                source: .nationalGallery(id: object.id)
+            )
         }
     }
 
