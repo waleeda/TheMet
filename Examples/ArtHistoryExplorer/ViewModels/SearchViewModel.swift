@@ -149,7 +149,7 @@ final class SearchViewModel: ObservableObject {
         relatedTask?.cancel()
         relatedTask = Task { [service] in
             do {
-                let picks = try await service.relatedMetHighlights(for: metID, limit: 4)
+                let picks = try await service.relatedMetObjects(for: metID, limit: 4)
                 await MainActor.run {
                     self.relatedPicks = picks
                 }

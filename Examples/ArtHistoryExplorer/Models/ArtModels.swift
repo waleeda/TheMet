@@ -48,3 +48,18 @@ public struct CombinedSearchResult: Identifiable, Equatable {
     public let imageURL: URL?
     public let source: ArtworkSource
 }
+
+public struct ArtworkDetail: Identifiable, Equatable {
+    public let id = UUID()
+    public let title: String
+    public let artist: String
+    public let museum: String
+    public let dateText: String
+    public let medium: String
+    public let culture: String
+    public let dimensions: String
+    public let creditLine: String
+    public let description: String
+    public let imageURL: URL?
+    public let source: ArtworkSource
+}
