@@ -25,6 +25,7 @@ public final class NationalGalleryClient {
     private let session: URLSession
     private let requestBuilder: RequestBuilder
     private let retryConfiguration: RetryConfiguration
+    private let onRetry: RetryEventHandler?
     public let decoder: JSONDecoder
 
     public struct DecodingStrategies {
@@ -67,11 +68,13 @@ public final class NationalGalleryClient {
         decodingStrategies: DecodingStrategies = DecodingStrategies(),
         requestTimeout: TimeInterval = 30,
         retryConfiguration: RetryConfiguration = RetryConfiguration(),
-        requestBuilder: RequestBuilder? = nil
+        requestBuilder: RequestBuilder? = nil,
+        onRetry: RetryEventHandler? = nil
     ) {
         self.baseURL = baseURL
         self.session = session
         self.retryConfiguration = retryConfiguration
+        self.onRetry = onRetry
         let timeout = requestTimeout
         self.requestBuilder = requestBuilder ?? { url in
             var request = URLRequest(url: url)
@@ -289,6 +292,7 @@ public final class NationalGalleryClient {
                 }
                 guard 200..<300 ~= httpResponse.statusCode else {
                     if shouldRetry(statusCode: httpResponse.statusCode, attempt: attempt) {
+                        notifyRetry(attempt: attempt, delay: backoff, reason: .httpStatus(httpResponse.statusCode))
                         attempt += 1
                         try await applyBackoff(delay: backoff)
                         backoff *= retryConfiguration.backoffMultiplier
@@ -299,6 +303,11 @@ public final class NationalGalleryClient {
                 return try decoder.decode(type, from: data)
             } catch {
                 if shouldRetry(error: error, attempt: attempt) {
+                    notifyRetry(
+                        attempt: attempt,
+                        delay: backoff,
+                        reason: .transportError((error as? URLError)?.code ?? .unknown)
+                    )
                     attempt += 1
                     try await applyBackoff(delay: backoff)
                     backoff *= retryConfiguration.backoffMultiplier
@@ -307,6 +316,11 @@ public final class NationalGalleryClient {
                 throw error
             }
         }
+    }
+
+    private func notifyRetry(attempt: Int, delay: TimeInterval, reason: RetryReason) {
+        guard let onRetry else { return }
+        onRetry(RetryEvent(attempt: attempt + 1, delay: delay, reason: reason))
     }
 
     private func shouldRetry(statusCode: Int, attempt: Int) -> Bool {

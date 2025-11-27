@@ -760,10 +760,60 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(progressUpdates.map(\.completed), [1, 2, 3])
         XCTAssertEqual(progressUpdates.map(\.total), Array(repeating: ids.count, count: ids.count))
     }
+
+    func testEmitsRetryEventsForHttpStatusCodes() async throws {
+        let expectedResponse = ObjectIDsResponse(total: 1, objectIDs: [1])
+        var callCount = 0
+        let session = URLSession.mock { _ in
+            callCount += 1
+            if callCount == 1 {
+                return (Data(), 429)
+            }
+            return (try JSONEncoder().encode(expectedResponse), 200)
+        }
+
+        let retryEvents = ProgressCollector()
+        let client = MetClient(
+            session: session,
+            retryConfiguration: .init(maxRetries: 1, initialBackoff: 0, backoffMultiplier: 1),
+            onRetry: { retryEvents.append($0) }
+        )
+
+        let ids = try await client.objectIDs().objectIDs
+        let events = retryEvents.retryEventsSnapshot()
+
+        XCTAssertEqual(ids, expectedResponse.objectIDs)
+        XCTAssertEqual(events, [RetryEvent(attempt: 1, delay: 0, reason: .httpStatus(429))])
+    }
+
+    func testEmitsRetryEventsForTransportErrors() async throws {
+        let expectedResponse = ObjectIDsResponse(total: 1, objectIDs: [1])
+        var callCount = 0
+        let session = URLSession.mock { _ in
+            callCount += 1
+            if callCount == 1 {
+                throw URLError(.timedOut)
+            }
+            return (try JSONEncoder().encode(expectedResponse), 200)
+        }
+
+        let retryEvents = ProgressCollector()
+        let client = MetClient(
+            session: session,
+            retryConfiguration: .init(maxRetries: 1, initialBackoff: 0.01, backoffMultiplier: 1),
+            onRetry: { retryEvents.append($0) }
+        )
+
+        let ids = try await client.objectIDs().objectIDs
+        let events = retryEvents.retryEventsSnapshot()
+
+        XCTAssertEqual(ids, expectedResponse.objectIDs)
+        XCTAssertEqual(events, [RetryEvent(attempt: 1, delay: 0.01, reason: .transportError(.timedOut))])
+    }
 }
 
 private final class URLProtocolMock: URLProtocol {
-    static var responder: ((URLRequest) throws -> Data)?
+    static var responder: ((URLRequest) throws -> (Data, Int))?
 
     override class func canInit(with request: URLRequest) -> Bool {
         true
@@ -780,11 +830,11 @@ private final class URLProtocolMock: URLProtocol {
         }
 
         do {
-            let data = try responder(request)
+            let (data, statusCode) = try responder(request)
             guard let url = request.url else {
                 throw URLError(.badURL)
             }
-            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
@@ -798,6 +848,15 @@ private final class URLProtocolMock: URLProtocol {
 
 private extension URLSession {
     static func mock(respondingWith responder: @escaping (URLRequest) throws -> Data) -> URLSession {
+        URLProtocolMock.responder = { request in
+            (try responder(request), 200)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolMock.self]
+        return URLSession(configuration: configuration)
+    }
+
+    static func mock(respondingWith responder: @escaping (URLRequest) throws -> (Data, Int)) -> URLSession {
         URLProtocolMock.responder = responder
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [URLProtocolMock.self]
@@ -808,6 +867,7 @@ private extension URLSession {
 private final class ProgressCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var updates: [StreamProgress] = []
+    private var retryEvents: [RetryEvent] = []
 
     func append(_ progress: StreamProgress) {
         lock.lock()
@@ -815,9 +875,22 @@ private final class ProgressCollector: @unchecked Sendable {
         lock.unlock()
     }
 
+    func append(_ retryEvent: RetryEvent) {
+        lock.lock()
+        retryEvents.append(retryEvent)
+        lock.unlock()
+    }
+
     func snapshot() -> [StreamProgress] {
         lock.lock()
         let result = updates
+        lock.unlock()
+        return result
+    }
+
+    func retryEventsSnapshot() -> [RetryEvent] {
+        lock.lock()
+        let result = retryEvents
         lock.unlock()
         return result
     }
