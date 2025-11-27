@@ -118,6 +118,30 @@ for try await object in client.allObjects(pageSize: 100, concurrentRequests: 4, 
 }
 ```
 
+## Smithsonian Open Access (EDAN/CC0) support
+
+Browse image-first Smithsonian records using the `SmithsonianClient`. CC0 media is enabled by default and you can facet by topic, place, or date directly in the search query:
+
+```swift
+import TheMet
+
+let smithsonian = SmithsonianClient()
+
+let response = try await smithsonian.search(
+    SmithsonianSearchQuery(
+        searchTerm: "pottery",
+        topic: "Ceramics",
+        place: "Peru",
+        date: "1200",
+        rows: 20
+    )
+)
+
+guard let first = response.rows.first else { return }
+print(first.title ?? "Untitled")
+print(first.media.first?.bestURL?.absoluteString ?? "No media")
+```
+
 ### Cross-museum browsing
 
 Prefer a single toggle between the Met and the National Gallery of Art? Use `CrossMuseumClient` to pick a source while keeping a consistent API for listing IDs, searching, fetching objects, or streaming entire collections:
