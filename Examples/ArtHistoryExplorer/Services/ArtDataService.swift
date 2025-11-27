@@ -30,24 +30,21 @@ public struct ArtDataService {
     }
 
     public func objects(in department: Department, limit: Int = 24) async throws -> [DepartmentObject] {
-        let query = ObjectQuery(departmentIds: [department.departmentId], hasImages: true)
-        let idsResponse = try await metClient.objectIDs(for: query)
-        let ids = idsResponse.objectIDs.prefix(limit)
+        let queries = [
+            ObjectQuery(departmentIds: [department.departmentId], hasImages: true, isHighlight: true),
+            ObjectQuery(departmentIds: [department.departmentId], hasImages: true, isOnView: true),
+            ObjectQuery(departmentIds: [department.departmentId], hasImages: true)
+        ]
 
-        return try await withThrowingTaskGroup(of: DepartmentObject?.self) { group in
-            for id in ids {
-                group.addTask {
-                    let object = try await metClient.object(id: id)
-                    return DepartmentObject(metObject: object)
-                }
-            }
+        for query in queries {
+            let ids = try await metClient.objectIDs(for: query).objectIDs.prefix(limit)
+            guard ids.isEmpty == false else { continue }
 
-            var objects: [DepartmentObject] = []
-            for try await object in group {
-                if let object { objects.append(object) }
-            }
-            return objects.sorted { $0.title < $1.title }
+            let objects = try await loadObjects(for: Array(ids))
+            if objects.isEmpty == false { return objects }
         }
+
+        return []
     }
 
     public func suggestions(for term: String) async throws -> [String] {
@@ -129,6 +126,23 @@ public struct ArtDataService {
 }
 
 private extension ArtDataService {
+    func loadObjects(for ids: [Int]) async throws -> [DepartmentObject] {
+        try await withThrowingTaskGroup(of: DepartmentObject?.self) { group in
+            for id in ids {
+                group.addTask {
+                    let object = try await metClient.object(id: id)
+                    return DepartmentObject(metObject: object)
+                }
+            }
+
+            var objects: [DepartmentObject] = []
+            for try await object in group {
+                if let object { objects.append(object) }
+            }
+            return objects.sorted { $0.title < $1.title }
+        }
+    }
+
     func fetchMetHighlights() async throws -> [ArtTimelineEntry] {
         let searchResults = try await metClient.search(SearchQuery(searchTerm: "highlight", isHighlight: true, hasImages: true, dateBegin: 1200))
         let ids = searchResults.objectIDs.prefix(12)
