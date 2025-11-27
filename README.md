@@ -28,6 +28,21 @@ Filter object identifiers using optional parameters:
 let ids = try await client.objectIDs(for: ObjectQuery(departmentIds: [6], hasImages: true)).objectIDs
 ```
 
+You can also compose filters with the `MetFilter` enum and reuse them across endpoints:
+
+```swift
+let filters: [MetFilter] = [
+    .searchTerm("flowers"),
+    .departmentId(5),
+    .hasImages(true),
+    .dateBegin(1800),
+    .dateEnd(1900)
+]
+
+let filteredIDs = try await client.objectIDs(using: filters).objectIDs
+let searchResults = try await client.search(using: filters).objectIDs
+```
+
 You can also reuse search-style filters on the lighter objects endpoint without switching query types:
 
 ```swift
