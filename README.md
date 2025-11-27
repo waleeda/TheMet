@@ -118,9 +118,31 @@ for try await object in client.allObjects(pageSize: 100, concurrentRequests: 4, 
 }
 ```
 
+## Europeana federated search
+
+Search Europeana's pan-European cultural-heritage catalog with facet support for providers, media types, and years, while surfacing stable IIIF image URLs:
+
+```swift
+let europeana = EuropeanaClient()
+
+let results = try await europeana.search(
+    EuropeanaSearchQuery(
+        searchTerm: "impressionism",
+        providers: ["Rijksmuseum"],
+        mediaTypes: ["IMAGE"],
+        years: [1889],
+        pageSize: 12
+    )
+)
+
+print(results.totalResults)
+print(results.items.first?.displayTitle ?? "Untitled")
+print(results.items.first?.iiifImageURL?.absoluteString ?? "No IIIF preview")
+```
+
 ### Cross-museum browsing
 
-Prefer a single toggle between the Met and the National Gallery of Art? Use `CrossMuseumClient` to pick a source while keeping a consistent API for listing IDs, searching, fetching objects, or streaming entire collections:
+Prefer a single toggle between the Met, the National Gallery of Art, and Europeana? Use `CrossMuseumClient` to pick a source while keeping a consistent API for listing IDs, searching, fetching objects, or streaming entire collections:
 
 ```swift
 import TheMet
@@ -135,6 +157,13 @@ print(metSearch.objectIDs)
 client.source = .nationalGallery
 let ngaIDs = try await client.objectIDs(for: .nationalGallery(.init(hasImages: true, pageSize: 10)))
 print(ngaIDs.total)
+
+// Hop over to Europeana and facet by provider
+client.source = .europeana
+let europeanaResults = try await client.search(
+    .europeana(EuropeanaSearchQuery(searchTerm: "sunflowers", providers: ["Van Gogh Museum"], mediaTypes: ["IMAGE"]))
+)
+print(europeanaResults.total)
 
 // Stream objects from the active museum
 for try await object in client.allObjects(concurrentRequests: 4, progress: { progress in

@@ -43,6 +43,12 @@ private struct StubNationalGalleryAPI: NationalGalleryAPI {
     }
 }
 
+private struct StubEuropeanaAPI: EuropeanaAPI {
+    var response: EuropeanaSearchResponse
+
+    func search(_ query: EuropeanaSearchQuery) async throws -> EuropeanaSearchResponse { response }
+}
+
 final class CrossMuseumClientTests: XCTestCase {
     func testObjectIDsSwitchesMuseums() async throws {
         let met = StubMetAPI(
@@ -67,7 +73,9 @@ final class CrossMuseumClientTests: XCTestCase {
             )
         )
 
-        let client = CrossMuseumClient(source: .met, metClient: met, nationalGalleryClient: nga)
+        let europeana = StubEuropeanaAPI(response: EuropeanaSearchResponse(totalResults: 0, items: []))
+
+        let client = CrossMuseumClient(source: .met, metClient: met, nationalGalleryClient: nga, europeanaClient: europeana)
 
         let metIDs = try await client.objectIDs()
         XCTAssertEqual(metIDs.museum, .met)
@@ -92,7 +100,9 @@ final class CrossMuseumClientTests: XCTestCase {
             object: NationalGalleryObject(id: 0, title: nil, creator: nil, displayDate: nil, medium: nil, dimensions: nil, department: nil, objectType: nil, image: nil, description: nil)
         )
 
-        let client = CrossMuseumClient(source: .met, metClient: met, nationalGalleryClient: nga)
+        let europeana = StubEuropeanaAPI(response: EuropeanaSearchResponse(totalResults: 0, items: []))
+
+        let client = CrossMuseumClient(source: .met, metClient: met, nationalGalleryClient: nga, europeanaClient: europeana)
 
         do {
             _ = try await client.search(.nationalGallery(NationalGalleryObjectQuery()))
@@ -103,6 +113,84 @@ final class CrossMuseumClientTests: XCTestCase {
 
         let metResults = try await client.search(.met(SearchQuery(searchTerm: "vase")))
         XCTAssertEqual(metResults.objectIDs, [10])
+    }
+
+    func testEuropeanaSearchSupportsFacets() async throws {
+        let met = StubMetAPI(
+            idsResponse: ObjectIDsResponse(total: 0, objectIDs: []),
+            searchResponse: ObjectIDsResponse(total: 0, objectIDs: []),
+            object: MetObject(
+                objectID: 0,
+                isHighlight: nil,
+                accessionNumber: nil,
+                accessionYear: nil,
+                primaryImage: nil,
+                primaryImageSmall: nil,
+                department: nil,
+                objectName: nil,
+                title: nil,
+                culture: nil,
+                period: nil,
+                dynasty: nil,
+                reign: nil,
+                portfolio: nil,
+                artistDisplayName: nil,
+                artistDisplayBio: nil,
+                objectDate: nil,
+                medium: nil,
+                dimensions: nil,
+                creditLine: nil,
+                geographyType: nil,
+                city: nil,
+                state: nil,
+                county: nil,
+                country: nil,
+                classification: nil,
+                objectURL: nil,
+                tags: nil
+            )
+        )
+        let nga = StubNationalGalleryAPI(
+            idsResponse: NationalGalleryObjectIDsResponse(totalRecords: 0, objectIDs: []),
+            object: NationalGalleryObject(id: 0, title: nil, creator: nil, displayDate: nil, medium: nil, dimensions: nil, department: nil, objectType: nil, image: nil, description: nil)
+        )
+
+        let expectedItems = [
+            EuropeanaItem(id: "/foo/1", title: ["First"], guid: nil, dataProvider: ["Test"], provider: nil, type: "IMAGE", year: [1920], edmIsShownBy: nil, edmPreview: nil, edmIiif: nil),
+            EuropeanaItem(id: "/foo/2", title: ["Second"], guid: nil, dataProvider: nil, provider: ["Provider"], type: "SOUND", year: [1889], edmIsShownBy: nil, edmPreview: nil, edmIiif: nil)
+        ]
+
+        let europeana = StubEuropeanaAPI(
+            response: EuropeanaSearchResponse(
+                totalResults: 2,
+                items: expectedItems
+            )
+        )
+
+        let client = CrossMuseumClient(source: .europeana, metClient: met, nationalGalleryClient: nga, europeanaClient: europeana)
+
+        do {
+            _ = try await client.search(.met(SearchQuery(searchTerm: "ignored")))
+            XCTFail("Expected Europeana query to be required")
+        } catch {
+            XCTAssertEqual(error as? CrossMuseumClientError, .missingEuropeanaSearchQuery)
+        }
+
+        let response = try await client.search(
+            .europeana(
+                EuropeanaSearchQuery(
+                    searchTerm: "posters",
+                    providers: ["Smithsonian"],
+                    mediaTypes: ["IMAGE"],
+                    years: [1920]
+                )
+            )
+        )
+
+        XCTAssertEqual(response.museum, .europeana)
+        XCTAssertEqual(response.total, 2)
+        XCTAssertEqual(response.europeanaItems, expectedItems)
+        XCTAssertNil(response.objectIDs)
     }
 
     func testStreamsWrapUnderlyingObjects() async throws {
@@ -116,7 +204,9 @@ final class CrossMuseumClientTests: XCTestCase {
             object: NationalGalleryObject(id: 6, title: "NGA", creator: nil, displayDate: nil, medium: nil, dimensions: nil, department: nil, objectType: nil, image: nil, description: nil)
         )
 
-        let client = CrossMuseumClient(source: .met, metClient: met, nationalGalleryClient: nga)
+        let europeana = StubEuropeanaAPI(response: EuropeanaSearchResponse(totalResults: 0, items: []))
+
+        let client = CrossMuseumClient(source: .met, metClient: met, nationalGalleryClient: nga, europeanaClient: europeana)
 
         let metProgress = expectation(description: "Met progress")
         metProgress.expectedFulfillmentCount = 1
