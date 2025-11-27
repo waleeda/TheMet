@@ -144,6 +144,29 @@ for try await object in client.allObjects(concurrentRequests: 4, progress: { pro
 }
 ```
 
+## Harvard Art Museums support
+
+The package also ships with a `HarvardArtMuseumsClient` that mirrors the convenience of the other clients while exposing Harvard-specific filters for culture, period, and classification. Provide your Harvard API key and reuse the familiar departments and objects endpoints:
+
+```swift
+import TheMet
+
+let harvard = HarvardArtMuseumsClient(apiKey: "YOUR_API_KEY")
+let ids = try await harvard.objectIDs(for: HarvardObjectQuery(culture: "Chinese", classification: "Prints", hasImage: true)).objectIDs
+let departments = try await harvard.departments()
+let object = try await harvard.object(id: ids.first ?? 0)
+```
+
+You can stream Harvard objects with cancellation and progress callbacks just like the other clients:
+
+```swift
+for try await object in harvard.allObjects(query: HarvardObjectQuery(period: "Renaissance"), pageSize: 50, concurrentRequests: 4, progress: { progress in
+    print("Finished \(progress.completed) of \(progress.total)")
+}) {
+    print(object.title ?? "Untitled")
+}
+```
+
 ### Custom JSON decoding strategies
 
 If your project requires specific decoding behavior (for example, ISO 8601 dates or custom floating-point formatting), you can configure the decoder used by `MetClient` without building it yourself:
