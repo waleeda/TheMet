@@ -81,6 +81,9 @@ struct SearchScreen: View {
                 TextField("Search by artist, style, or period", text: $viewModel.query)
                     .textFieldStyle(.roundedBorder)
                     .submitLabel(.search)
+                    .onChange(of: viewModel.query) { newValue in
+                        viewModel.updateSuggestions(for: newValue)
+                    }
                     .onSubmit { viewModel.search() }
 
                 if viewModel.isLoading {
@@ -91,8 +94,36 @@ struct SearchScreen: View {
                     ContentUnavailableView("Search failed", systemImage: "questionmark.circle", description: Text(error))
                 }
 
-                List(viewModel.results) { result in
-                    SearchResultRow(result: result)
+                List {
+                    if viewModel.suggestions.isEmpty == false {
+                        Section("Suggested searches") {
+                            ForEach(viewModel.suggestions, id: \.self) { suggestion in
+                                Button {
+                                    viewModel.query = suggestion
+                                    viewModel.search()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "lightbulb")
+                                        Text(suggestion)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Section(viewModel.results.isEmpty ? "" : "Results") {
+                        ForEach(viewModel.results) { result in
+                            SearchResultRow(result: result)
+                        }
+                    }
+
+                    if viewModel.relatedPicks.isEmpty == false {
+                        Section("Related picks from The Met") {
+                            ForEach(viewModel.relatedPicks) { result in
+                                SearchResultRow(result: result)
+                            }
+                        }
+                    }
                 }
             }
             .padding()

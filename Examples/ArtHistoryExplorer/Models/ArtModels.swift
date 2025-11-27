@@ -13,6 +13,11 @@ public enum ArtworkSource: Equatable, Hashable {
             return "National Gallery of Art"
         }
     }
+
+    public var metID: Int? {
+        if case let .met(id) = self { return id }
+        return nil
+    }
 }
 
 public struct ArtTimelineEntry: Identifiable, Equatable {

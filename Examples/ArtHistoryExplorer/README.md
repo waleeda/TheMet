@@ -4,6 +4,7 @@ A SwiftUI sample app that combines The Met Collection API and the National Galle
 
 ## How it works
 - Uses the `ArtDataService` to fetch highlighted works and search results from both museums.
+- Suggests search terms from The Met's autocomplete endpoint as you type and recommends related works after each search.
 - Builds a chronological timeline of artworks, then derives short lessons (e.g., Renaissance or Modernism) from the loaded items.
 - Provides a single search surface that returns combined results from The Met and the National Gallery.
 
