@@ -101,6 +101,11 @@ public final class MetClient {
         return try await objectIDs(for: query)
     }
 
+    public func objectIDs(usingSavedFilters name: String, from library: SavedFilterLibrary) async throws -> ObjectIDsResponse {
+        let filters = try filters(from: library, named: name)
+        return try await objectIDs(using: filters)
+    }
+
     public func departments() async throws -> [Department] {
         let url = try buildURL(path: "departments")
         let response = try await fetch(url: url, as: DepartmentsResponse.self)
@@ -115,6 +120,11 @@ public final class MetClient {
     public func search(using filters: [MetFilter]) async throws -> ObjectIDsResponse {
         let query = try SearchQuery(filters: filters)
         return try await search(query)
+    }
+
+    public func search(usingSavedFilters name: String, from library: SavedFilterLibrary) async throws -> ObjectIDsResponse {
+        let filters = try filters(from: library, named: name)
+        return try await search(using: filters)
     }
 
     public func autocomplete(_ searchTerm: String) async throws -> [String] {
@@ -242,6 +252,13 @@ public final class MetClient {
         }
 
         try checkCancellation(cancellation)
+    }
+
+    private func filters(from library: SavedFilterLibrary, named name: String) throws -> [MetFilter] {
+        guard let filters = library.filters(named: name) else {
+            throw SavedFilterError.missingFilterSet(name)
+        }
+        return filters
     }
 
     private func checkCancellation(_ cancellation: CooperativeCancellation?) throws {

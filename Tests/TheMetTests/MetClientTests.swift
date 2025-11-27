@@ -461,6 +461,88 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.total, 2)
     }
 
+    func testRunsObjectIDsUsingSavedFilters() async throws {
+        let library = SavedFilterLibrary()
+        library.save([.departmentIds([8, 9]), .hasImages(true)], named: "European Paintings")
+
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/public/collection/v1/objects")
+
+            let parameters = Dictionary(uniqueKeysWithValues: (components?.queryItems ?? []).map { ($0.name, $0.value) })
+            XCTAssertEqual(parameters["departmentIds"], "8|9")
+            XCTAssertEqual(parameters["hasImages"], "true")
+
+            let response = ObjectIDsResponse(total: 1, objectIDs: [88])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let response = try await client.objectIDs(usingSavedFilters: "European Paintings", from: library)
+
+        XCTAssertEqual(response.total, 1)
+        XCTAssertEqual(response.objectIDs, [88])
+    }
+
+    func testRunsSearchUsingSavedFilters() async throws {
+        let filters: [MetFilter] = [.searchTerm("sunrise"), .departmentId(12), .hasImages(false), .dateBegin(1800), .dateEnd(1850)]
+        let library = SavedFilterLibrary(savedFilterSets: [SavedFilterSet(name: "Romanticism", filters: filters)])
+
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/public/collection/v1/search")
+
+            let parameters = Dictionary(uniqueKeysWithValues: (components?.queryItems ?? []).map { ($0.name, $0.value) })
+            XCTAssertEqual(parameters["q"], "sunrise")
+            XCTAssertEqual(parameters["departmentId"], "12")
+            XCTAssertEqual(parameters["hasImages"], "false")
+            XCTAssertEqual(parameters["dateBegin"], "1800")
+            XCTAssertEqual(parameters["dateEnd"], "1850")
+
+            let response = ObjectIDsResponse(total: 3, objectIDs: [11, 12, 13])
+            return try JSONEncoder().encode(response)
+        }
+
+        let client = MetClient(session: session)
+        let response = try await client.search(usingSavedFilters: "Romanticism", from: library)
+
+        XCTAssertEqual(response.total, 3)
+        XCTAssertEqual(response.objectIDs, [11, 12, 13])
+    }
+
+    func testSavedFiltersSurfaceHelpfulError() async throws {
+        let client = MetClient()
+        let library = SavedFilterLibrary()
+
+        do {
+            _ = try await client.search(usingSavedFilters: "Missing", from: library)
+            XCTFail("Expected missing saved filters to throw")
+        } catch {
+            XCTAssertEqual(error as? SavedFilterError, .missingFilterSet("Missing"))
+        }
+    }
+
+    func testSavedFilterLibraryStoresAndRemovesFilters() {
+        let filters: [MetFilter] = [.searchTerm("portraits"), .hasImages(true), .isOnView(true)]
+        let library = SavedFilterLibrary()
+
+        let saved = library.save(filters, named: "Highlights")
+        XCTAssertEqual(saved.name, "Highlights")
+        XCTAssertEqual(saved.filters, filters)
+        XCTAssertEqual(library.filterSet(named: "Highlights"), saved)
+
+        library.save([.searchTerm("landscape")], named: "Landscapes")
+
+        let allSets = library.allFilterSets
+        XCTAssertEqual(allSets.count, 2)
+        XCTAssertTrue(allSets.contains(saved))
+
+        library.remove(named: "Highlights")
+        XCTAssertNil(library.filters(named: "Highlights"))
+    }
+
     func testSearchRequiresSearchTermWhenBuildingFromFilters() throws {
         XCTAssertThrowsError(try SearchQuery(filters: [.hasImages(true)])) { error in
             XCTAssertEqual(error as? SearchQueryError, .missingSearchTerm)
