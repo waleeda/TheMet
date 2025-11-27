@@ -79,8 +79,26 @@ struct ArtworkDetailView: View {
                     Text(detail.culture.isEmpty ? "—" : detail.culture)
                 }
                 GridRow {
+                    Text("Classification").font(.subheadline.bold())
+                    Text(detail.classification.isEmpty ? "—" : detail.classification)
+                }
+                GridRow {
+                    Text("Object type").font(.subheadline.bold())
+                    Text(detail.objectName.isEmpty ? "—" : detail.objectName)
+                }
+                GridRow {
                     Text("Dimensions").font(.subheadline.bold())
                     Text(detail.dimensions.isEmpty ? "—" : detail.dimensions)
+                }
+                GridRow {
+                    Text("Accession").font(.subheadline.bold())
+                    Text(detail.accessionNumber.isEmpty ? "—" : detail.accessionNumber)
+                }
+                if detail.location.isEmpty == false {
+                    GridRow {
+                        Text("Location").font(.subheadline.bold())
+                        Text(detail.location)
+                    }
                 }
                 if detail.creditLine.isEmpty == false {
                     GridRow {
@@ -101,6 +119,21 @@ struct ArtworkDetailView: View {
                 Text(detail.description)
                     .font(.body)
                     .foregroundStyle(.secondary)
+            }
+        }
+
+        if detail.tags.isEmpty == false {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Tags")
+                    .font(.headline)
+                Wrap(tags: detail.tags)
+            }
+        }
+
+        if let url = detail.objectURL {
+            Link(destination: url) {
+                Label("View on museum site", systemImage: "arrow.up.right.square")
+                    .font(.body.bold())
             }
         }
     }
@@ -167,5 +200,25 @@ private struct RelatedCard: View {
         .frame(width: 160, alignment: .leading)
         .padding()
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+    }
+}
+
+private struct Wrap: View {
+    let tags: [String]
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: 80), spacing: 8)]
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(.footnote.bold())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color(.secondarySystemBackground)))
+            }
+        }
     }
 }
