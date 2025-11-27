@@ -42,6 +42,9 @@ final class SearchViewModel: ObservableObject {
             return
         }
 
+        suggestionTask?.cancel()
+        suggestions = []
+
         Task {
             await performSearch(term: trimmed)
         }
@@ -112,6 +115,17 @@ final class SearchViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    func applySuggestion(_ suggestion: String) {
+        suggestionTask?.cancel()
+        suggestions = []
+        query = suggestion
+        search()
+    }
+
+    var shouldShowSuggestions: Bool {
+        suggestions.isEmpty == false && query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
     }
 
     private func performSearch(term: String) async {

@@ -79,13 +79,22 @@ struct SearchScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                TextField("Search by artist, style, or period", text: $viewModel.query)
-                    .textFieldStyle(.roundedBorder)
-                    .submitLabel(.search)
-                    .onChange(of: viewModel.query) { newValue in
-                        viewModel.updateSuggestions(for: newValue)
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Search by artist, style, or period", text: $viewModel.query)
+                        .textFieldStyle(.roundedBorder)
+                        .submitLabel(.search)
+                        .onChange(of: viewModel.query) { newValue in
+                            viewModel.updateSuggestions(for: newValue)
+                        }
+                        .onSubmit { viewModel.search() }
+
+                    if viewModel.shouldShowSuggestions {
+                        AutocompleteSuggestionList(suggestions: viewModel.suggestions) { suggestion in
+                            viewModel.applySuggestion(suggestion)
+                        }
+                        .transition(.opacity)
                     }
-                    .onSubmit { viewModel.search() }
+                }
 
                 FilterControls(filters: $viewModel.filters, departments: viewModel.departments, onReset: viewModel.resetFilters)
 
@@ -100,22 +109,6 @@ struct SearchScreen: View {
                 }
 
                 List {
-                    if viewModel.suggestions.isEmpty == false {
-                        Section("Suggested searches") {
-                            ForEach(viewModel.suggestions, id: \.self) { suggestion in
-                                Button {
-                                    viewModel.query = suggestion
-                                    viewModel.search()
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "lightbulb")
-                                        Text(suggestion)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     Section(viewModel.results.isEmpty ? "" : "Results") {
                         ForEach(viewModel.results) { result in
                             SearchResultRow(result: result)
@@ -135,6 +128,40 @@ struct SearchScreen: View {
             .navigationTitle("Discover Museums")
             .task { viewModel.loadDepartments() }
         }
+    }
+}
+
+struct AutocompleteSuggestionList: View {
+    let suggestions: [String]
+    var onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
+                Button(action: { onSelect(suggestion) }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkle.magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        Text(suggestion)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+
+                if index < suggestions.count - 1 {
+                    Divider()
+                }
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 10).fill(.thickMaterial))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.gray.opacity(0.2))
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 4)
     }
 }
 
