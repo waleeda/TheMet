@@ -510,6 +510,93 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(object.creator, "Jane Doe")
         XCTAssertEqual(object.objectType, "Painting")
     }
+
+    func testStreamsNationalGalleryObjectsAcrossPages() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+
+            if components?.path == "/collection/art/objects" {
+                let queryItems = components?.queryItems ?? []
+                let parameters = Dictionary(uniqueKeysWithValues: queryItems.map { ($0.name, $0.value ?? "") })
+                let page = Int(parameters["page"] ?? "1") ?? 1
+
+                switch page {
+                case 1:
+                    return try JSONEncoder().encode(NationalGalleryObjectIDsResponse(totalRecords: 3, objectIDs: [101, 102]))
+                case 2:
+                    return try JSONEncoder().encode(NationalGalleryObjectIDsResponse(totalRecords: 3, objectIDs: [103]))
+                default:
+                    return try JSONEncoder().encode(NationalGalleryObjectIDsResponse(totalRecords: 3, objectIDs: []))
+                }
+            }
+
+            if components?.path.starts(with: "/collection/art/objects/") == true,
+               let id = Int(components?.path.split(separator: "/").last ?? "") {
+                let object = NationalGalleryObject(
+                    id: id,
+                    title: "Object #\(id)",
+                    creator: nil,
+                    displayDate: nil,
+                    medium: nil,
+                    dimensions: nil,
+                    department: nil,
+                    objectType: nil,
+                    image: nil,
+                    description: nil
+                )
+                return try JSONEncoder().encode(object)
+            }
+
+            throw URLError(.unsupportedURL)
+        }
+
+        let client = NationalGalleryClient(session: session)
+        var streamedIDs: [Int] = []
+
+        for try await object in client.allObjects(pageSize: 2, concurrentRequests: 1) {
+            streamedIDs.append(object.id)
+        }
+
+        XCTAssertEqual(streamedIDs.sorted(), [101, 102, 103])
+    }
+
+    func testNationalGalleryObjectsReportProgress() async throws {
+        let ids = [201, 202, 203]
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            guard let id = Int(url.lastPathComponent) else { throw URLError(.unsupportedURL) }
+            let object = NationalGalleryObject(
+                id: id,
+                title: "Item #\(id)",
+                creator: nil,
+                displayDate: nil,
+                medium: nil,
+                dimensions: nil,
+                department: nil,
+                objectType: nil,
+                image: nil,
+                description: nil
+            )
+            return try JSONEncoder().encode(object)
+        }
+
+        let client = NationalGalleryClient(session: session)
+        let progressCollector = ProgressCollector()
+        var streamedIDs: [Int] = []
+
+        for try await object in client.objects(ids: ids, concurrentRequests: 2, progress: { progress in
+            progressCollector.append(progress)
+        }) {
+            streamedIDs.append(object.id)
+        }
+
+        let progressUpdates = progressCollector.snapshot()
+
+        XCTAssertEqual(streamedIDs.sorted(), ids)
+        XCTAssertEqual(progressUpdates.map(\.completed), [1, 2, 3])
+        XCTAssertEqual(progressUpdates.map(\.total), Array(repeating: ids.count, count: ids.count))
+    }
 }
 
 private final class URLProtocolMock: URLProtocol {
