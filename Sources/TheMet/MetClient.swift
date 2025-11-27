@@ -96,6 +96,11 @@ public final class MetClient {
         return try await fetch(url: url, as: ObjectIDsResponse.self)
     }
 
+    public func objectIDs(using filters: [MetFilter]) async throws -> ObjectIDsResponse {
+        let query = ObjectQuery(filters: filters)
+        return try await objectIDs(for: query)
+    }
+
     public func departments() async throws -> [Department] {
         let url = try buildURL(path: "departments")
         let response = try await fetch(url: url, as: DepartmentsResponse.self)
@@ -105,6 +110,11 @@ public final class MetClient {
     public func search(_ query: SearchQuery) async throws -> ObjectIDsResponse {
         let url = try buildURL(path: "search", queryItems: query.queryItems)
         return try await fetch(url: url, as: ObjectIDsResponse.self)
+    }
+
+    public func search(using filters: [MetFilter]) async throws -> ObjectIDsResponse {
+        let query = try SearchQuery(filters: filters)
+        return try await search(query)
     }
 
     public func autocomplete(_ searchTerm: String) async throws -> [String] {

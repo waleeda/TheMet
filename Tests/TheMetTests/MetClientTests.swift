@@ -116,6 +116,47 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(items["dateEnd"], "1900")
     }
 
+    func testBuildsObjectQueryFromFiltersEnum() throws {
+        var dateComponents = DateComponents()
+        dateComponents.calendar = Calendar(identifier: .gregorian)
+        dateComponents.year = 2023
+        dateComponents.month = 12
+        dateComponents.day = 31
+        let metadataDate = try XCTUnwrap(dateComponents.date)
+
+        let filters: [MetFilter] = [
+            .departmentIds([3, 4]),
+            .hasImages(true),
+            .searchTerm("portraits"),
+            .metadataDate(metadataDate),
+            .isHighlight(false),
+            .isOnView(true),
+            .artistOrCulture(false),
+            .medium("Oil"),
+            .geoLocation("United States"),
+            .dateBegin(1700),
+            .dateEnd(1900)
+        ]
+
+        let query = ObjectQuery(filters: filters)
+        let items = Dictionary<String, String>(uniqueKeysWithValues: query.queryItems.compactMap { item in
+            guard let value = item.value else { return nil }
+            return (item.name, value)
+        })
+
+        XCTAssertEqual(items["departmentIds"], "3|4")
+        XCTAssertEqual(items["hasImages"], "true")
+        XCTAssertEqual(items["q"], "portraits")
+        XCTAssertEqual(items["metadataDate"], "2023-12-31")
+        XCTAssertEqual(items["isHighlight"], "false")
+        XCTAssertEqual(items["isOnView"], "true")
+        XCTAssertEqual(items["artistOrCulture"], "false")
+        XCTAssertEqual(items["medium"], "Oil")
+        XCTAssertEqual(items["geoLocation"], "United States")
+        XCTAssertEqual(items["dateBegin"], "1700")
+        XCTAssertEqual(items["dateEnd"], "1900")
+    }
+
     func testConfiguresDecoderStrategiesWhenNoCustomDecoderProvided() throws {
         let client = MetClient(
             decodingStrategies: .init(
@@ -384,6 +425,46 @@ final class MetClientTests: XCTestCase {
 
         XCTAssertEqual(response.objectIDs, [42])
         XCTAssertEqual(response.total, 1)
+    }
+
+    func testSearchUsingFilters() async throws {
+        let session = URLSession.mock { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertEqual(components?.path, "/public/collection/v1/search")
+
+            let queryItems = components?.queryItems ?? []
+            let parameters = Dictionary(uniqueKeysWithValues: queryItems.map { ($0.name, $0.value) })
+
+            XCTAssertEqual(parameters["q"], "landscape")
+            XCTAssertEqual(parameters["departmentId"], "7")
+            XCTAssertEqual(parameters["hasImages"], "true")
+            XCTAssertEqual(parameters["dateBegin"], "1850")
+            XCTAssertEqual(parameters["dateEnd"], "1900")
+
+            let response = ObjectIDsResponse(total: 2, objectIDs: [101, 102])
+            return try JSONEncoder().encode(response)
+        }
+
+        let filters: [MetFilter] = [
+            .searchTerm("landscape"),
+            .departmentId(7),
+            .hasImages(true),
+            .dateBegin(1850),
+            .dateEnd(1900)
+        ]
+
+        let client = MetClient(session: session)
+        let response = try await client.search(using: filters)
+
+        XCTAssertEqual(response.objectIDs, [101, 102])
+        XCTAssertEqual(response.total, 2)
+    }
+
+    func testSearchRequiresSearchTermWhenBuildingFromFilters() throws {
+        XCTAssertThrowsError(try SearchQuery(filters: [.hasImages(true)])) { error in
+            XCTAssertEqual(error as? SearchQueryError, .missingSearchTerm)
+        }
     }
 
     func testObjectIDsIncludesMetadataDateParameter() async throws {

@@ -6,6 +6,21 @@ public struct ObjectIDsResponse: Codable, Equatable {
     public let objectIDs: [Int]
 }
 
+public enum MetFilter: Equatable {
+    case searchTerm(String)
+    case departmentIds([Int])
+    case departmentId(Int)
+    case hasImages(Bool)
+    case metadataDate(Date)
+    case isHighlight(Bool)
+    case isOnView(Bool)
+    case artistOrCulture(Bool)
+    case medium(String)
+    case geoLocation(String)
+    case dateBegin(Int)
+    case dateEnd(Int)
+}
+
 public struct DepartmentsResponse: Codable, Equatable {
     public let departments: [Department]
 }
@@ -58,6 +73,11 @@ public struct ObjectQuery: Equatable {
         self.dateEnd = dateEnd
     }
 
+    public init(filters: [MetFilter]) {
+        self.init()
+        apply(filters: filters)
+    }
+
     var queryItems: [URLQueryItem] {
         var items: [URLQueryItem] = []
         if let departmentIds, !departmentIds.isEmpty {
@@ -105,6 +125,37 @@ public struct ObjectQuery: Equatable {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         return formatter
     }()
+
+    public mutating func apply(filters: [MetFilter]) {
+        for filter in filters {
+            switch filter {
+            case .departmentIds(let ids):
+                departmentIds = ids
+            case .departmentId(let id):
+                departmentIds = [id]
+            case .hasImages(let value):
+                hasImages = value
+            case .searchTerm(let term):
+                searchQuery = term
+            case .metadataDate(let date):
+                metadataDate = date
+            case .isHighlight(let value):
+                isHighlight = value
+            case .isOnView(let value):
+                isOnView = value
+            case .artistOrCulture(let value):
+                artistOrCulture = value
+            case .medium(let value):
+                medium = value
+            case .geoLocation(let value):
+                geoLocation = value
+            case .dateBegin(let value):
+                dateBegin = value
+            case .dateEnd(let value):
+                dateEnd = value
+            }
+        }
+    }
 }
 
 public struct SearchQuery: Equatable {
@@ -143,6 +194,26 @@ public struct SearchQuery: Equatable {
         self.dateEnd = dateEnd
     }
 
+    public init(filters: [MetFilter]) throws {
+        var searchTerm: String?
+        self.init(searchTerm: "")
+        apply(filters: filters, capturedSearchTerm: &searchTerm)
+
+        guard let searchTerm else {
+            throw SearchQueryError.missingSearchTerm
+        }
+
+        self.searchTerm = searchTerm
+    }
+
+    public mutating func apply(filters: [MetFilter]) {
+        var capturedSearchTerm: String? = searchTerm
+        apply(filters: filters, capturedSearchTerm: &capturedSearchTerm)
+        if let capturedSearchTerm {
+            searchTerm = capturedSearchTerm
+        }
+    }
+
     var queryItems: [URLQueryItem] {
         var items: [URLQueryItem] = [URLQueryItem(name: "q", value: searchTerm)]
         if let isHighlight {
@@ -173,6 +244,48 @@ public struct SearchQuery: Equatable {
             items.append(URLQueryItem(name: "dateEnd", value: String(dateEnd)))
         }
         return items
+    }
+
+    public mutating func apply(filters: [MetFilter], capturedSearchTerm: inout String?) {
+        for filter in filters {
+            switch filter {
+            case .searchTerm(let term):
+                capturedSearchTerm = term
+            case .departmentId(let id):
+                departmentId = id
+            case .departmentIds(let ids):
+                departmentId = ids.first
+            case .hasImages(let value):
+                hasImages = value
+            case .isHighlight(let value):
+                isHighlight = value
+            case .isOnView(let value):
+                isOnView = value
+            case .artistOrCulture(let value):
+                artistOrCulture = value
+            case .medium(let value):
+                medium = value
+            case .geoLocation(let value):
+                geoLocation = value
+            case .dateBegin(let value):
+                dateBegin = value
+            case .dateEnd(let value):
+                dateEnd = value
+            case .metadataDate:
+                break
+            }
+        }
+    }
+}
+
+public enum SearchQueryError: Error, LocalizedError, Equatable {
+    case missingSearchTerm
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingSearchTerm:
+            return "A search term is required to perform a search request."
+        }
     }
 }
 
