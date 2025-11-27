@@ -25,6 +25,38 @@ public struct ArtDataService {
             .sorted { $0.title < $1.title }
     }
 
+    public func suggestions(for term: String) async throws -> [String] {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 3 else { return [] }
+        return try await metClient.autocomplete(trimmed)
+    }
+
+    public func relatedMetHighlights(for objectID: Int, limit: Int = 4) async throws -> [CombinedSearchResult] {
+        let response = try await metClient.relatedObjectIDs(for: objectID)
+        let ids = response.objectIDs.prefix(limit)
+
+        return try await withThrowingTaskGroup(of: CombinedSearchResult?.self) { group in
+            for id in ids {
+                group.addTask {
+                    let object = try await metClient.object(id: id)
+                    return CombinedSearchResult(
+                        title: object.title ?? "Untitled",
+                        subtitle: object.artistDisplayName ?? "Unknown artist",
+                        museum: "The Met",
+                        imageURL: URL(string: object.primaryImageSmall ?? object.primaryImage ?? ""),
+                        source: .met(id: object.objectID)
+                    )
+                }
+            }
+
+            var results: [CombinedSearchResult] = []
+            for try await result in group {
+                if let result { results.append(result) }
+            }
+            return results
+        }
+    }
+
     public func loadLessons(from entries: [ArtTimelineEntry]) -> [ArtLesson] {
         guard entries.isEmpty == false else { return [] }
 
