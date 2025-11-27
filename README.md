@@ -83,6 +83,18 @@ let object = try await nga.object(id: landscapes.first ?? 0)
 print(object.title ?? "Untitled")
 ```
 
+Stream the entire National Gallery of Art collection with familiar cancellation and progress hooks:
+
+```swift
+let client = NationalGalleryClient()
+
+for try await object in client.allObjects(pageSize: 100, concurrentRequests: 4, progress: { progress in
+    print("Finished \(progress.completed) of \(progress.total)")
+}) {
+    print(object.title ?? "Untitled")
+}
+```
+
 ### Custom JSON decoding strategies
 
 If your project requires specific decoding behavior (for example, ISO 8601 dates or custom floating-point formatting), you can configure the decoder used by `MetClient` without building it yourself:
