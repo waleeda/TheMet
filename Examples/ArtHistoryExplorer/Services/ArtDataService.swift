@@ -61,6 +61,18 @@ public struct ArtDataService {
         }
     }
 
+    public func streamFullMetCollection(
+        concurrentRequests: Int = 6,
+        progress: (@Sendable (StreamProgress) -> Void)? = nil,
+        cancellation: CooperativeCancellation? = nil
+    ) -> AsyncThrowingStream<MetObject, Error> {
+        metClient.allObjects(
+            concurrentRequests: concurrentRequests,
+            progress: progress,
+            cancellation: cancellation
+        )
+    }
+
     public func loadLessons(from entries: [ArtTimelineEntry]) -> [ArtLesson] {
         guard entries.isEmpty == false else { return [] }
 

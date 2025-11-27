@@ -12,10 +12,17 @@ final class SearchViewModel: ObservableObject {
     @Published var departments: [Department] = []
     @Published var isLoading = false
     @Published var error: String?
+    @Published var downloadProgress: StreamProgress?
+    @Published var downloadStatus: String? = "Download The Met collection in the background."
+    @Published var downloadError: String?
+    @Published var isDownloadingCollection = false
+    @Published var downloadedObjects = 0
 
     private let service: ArtDataService
     private var suggestionTask: Task<Void, Never>?
     private var relatedTask: Task<Void, Never>?
+    private var downloadTask: Task<Void, Never>?
+    private var isDownloadCancelled = false
 
     init(service: ArtDataService = ArtDataService()) {
         self.service = service
@@ -24,6 +31,7 @@ final class SearchViewModel: ObservableObject {
     deinit {
         suggestionTask?.cancel()
         relatedTask?.cancel()
+        downloadTask?.cancel()
     }
 
     func search() {
@@ -54,6 +62,33 @@ final class SearchViewModel: ObservableObject {
 
     func resetFilters() {
         filters = .default
+    }
+
+    func startCollectionDownload() {
+        guard isDownloadingCollection == false else { return }
+
+        downloadTask?.cancel()
+        downloadError = nil
+        downloadStatus = "Requesting object identifiers…"
+        downloadProgress = nil
+        downloadedObjects = 0
+        isDownloadingCollection = true
+        isDownloadCancelled = false
+
+        let cancellation = CooperativeCancellation { [weak self] in
+            self?.isDownloadCancelled ?? false
+        }
+
+        downloadTask = Task { [service] in
+            await streamCollection(using: service, cancellation: cancellation)
+        }
+    }
+
+    func cancelCollectionDownload() {
+        guard isDownloadingCollection else { return }
+        isDownloadCancelled = true
+        downloadTask?.cancel()
+        downloadStatus = "Cancelling download…"
     }
 
     func updateSuggestions(for term: String) {
@@ -109,6 +144,46 @@ final class SearchViewModel: ObservableObject {
                 await MainActor.run {
                     self.relatedPicks = []
                 }
+            }
+        }
+    }
+
+    private func streamCollection(using service: ArtDataService, cancellation: CooperativeCancellation) async {
+        do {
+            for try await object in service.streamFullMetCollection(
+                progress: { progress in
+                    Task { @MainActor in
+                        self.downloadProgress = progress
+                        self.downloadStatus = "Downloaded \(progress.completed.formatted()) of \(progress.total.formatted()) objects"
+                    }
+                },
+                cancellation: cancellation
+            ) {
+                if cancellation.isCancelled { throw CancellationError() }
+                try Task.checkCancellation()
+                await MainActor.run {
+                    self.downloadedObjects += 1
+                }
+                _ = object
+            }
+
+            await MainActor.run {
+                self.isDownloadingCollection = false
+                self.downloadTask = nil
+                self.downloadStatus = "Finished downloading \(downloadedObjects.formatted()) objects."
+            }
+        } catch is CancellationError {
+            await MainActor.run {
+                self.isDownloadingCollection = false
+                self.downloadTask = nil
+                self.downloadStatus = "Download cancelled after \(downloadedObjects.formatted()) objects."
+            }
+        } catch {
+            await MainActor.run {
+                self.isDownloadingCollection = false
+                self.downloadTask = nil
+                self.downloadError = error.localizedDescription
+                self.downloadStatus = "Download failed."
             }
         }
     }
