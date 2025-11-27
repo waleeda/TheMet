@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import TheMet
 
 @MainActor
 final class SearchViewModel: ObservableObject {
@@ -7,6 +8,8 @@ final class SearchViewModel: ObservableObject {
     @Published var results: [CombinedSearchResult] = []
     @Published var suggestions: [String] = []
     @Published var relatedPicks: [CombinedSearchResult] = []
+    @Published var filters: SearchFilters = .default
+    @Published var departments: [Department] = []
     @Published var isLoading = false
     @Published var error: String?
 
@@ -34,6 +37,23 @@ final class SearchViewModel: ObservableObject {
         Task {
             await performSearch(term: trimmed)
         }
+    }
+
+    func loadDepartments() {
+        Task { [service] in
+            do {
+                let departments = try await service.metDepartments()
+                await MainActor.run {
+                    self.departments = departments
+                }
+            } catch {
+                // Non-fatal: keep search usable even if departments cannot load.
+            }
+        }
+    }
+
+    func resetFilters() {
+        filters = .default
     }
 
     func updateSuggestions(for term: String) {
@@ -65,7 +85,7 @@ final class SearchViewModel: ObservableObject {
         relatedPicks = []
 
         do {
-            results = try await service.search(term)
+            results = try await service.search(term, filters: filters)
             await loadRelatedPicks(from: results)
         } catch {
             self.error = error.localizedDescription

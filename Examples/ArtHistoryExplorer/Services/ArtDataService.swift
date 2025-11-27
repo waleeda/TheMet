@@ -18,11 +18,15 @@ public struct ArtDataService {
             .sorted { $0.dateText < $1.dateText }
     }
 
-    public func search(_ term: String) async throws -> [CombinedSearchResult] {
-        async let metResults = searchMet(term: term)
+    public func search(_ term: String, filters: SearchFilters) async throws -> [CombinedSearchResult] {
+        async let metResults = searchMet(term: term, filters: filters)
         async let galleryResults = searchGallery(term: term)
         return try await (metResults + galleryResults)
             .sorted { $0.title < $1.title }
+    }
+
+    public func metDepartments() async throws -> [Department] {
+        try await metClient.departments()
     }
 
     public func suggestions(for term: String) async throws -> [String] {
@@ -149,8 +153,21 @@ private extension ArtDataService {
         }
     }
 
-    func searchMet(term: String) async throws -> [CombinedSearchResult] {
-        let response = try await metClient.search(SearchQuery(searchTerm: term, hasImages: true, dateBegin: 1000))
+    func searchMet(term: String, filters: SearchFilters) async throws -> [CombinedSearchResult] {
+        let query = SearchQuery(
+            searchTerm: term,
+            isHighlight: filters.highlightsOnly ? true : nil,
+            hasImages: filters.requiresImages ? true : nil,
+            departmentId: filters.departmentId,
+            isOnView: filters.onViewOnly ? true : nil,
+            artistOrCulture: filters.artistOrCultureOnly ? true : nil,
+            medium: filters.medium.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : filters.medium,
+            geoLocation: filters.geoLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : filters.geoLocation,
+            dateBegin: filters.parsedDateBegin,
+            dateEnd: filters.parsedDateEnd
+        )
+
+        let response = try await metClient.search(query)
         let ids = response.objectIDs.prefix(6)
         return try await withThrowingTaskGroup(of: CombinedSearchResult?.self) { group in
             for id in ids {
