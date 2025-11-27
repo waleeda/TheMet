@@ -89,6 +89,8 @@ struct SearchScreen: View {
 
                 FilterControls(filters: $viewModel.filters, departments: viewModel.departments, onReset: viewModel.resetFilters)
 
+                CollectionDownloadCard(viewModel: viewModel)
+
                 if viewModel.isLoading {
                     ProgressView()
                 }
@@ -133,6 +135,65 @@ struct SearchScreen: View {
             .navigationTitle("Discover Museums")
             .task { viewModel.loadDepartments() }
         }
+    }
+}
+
+struct CollectionDownloadCard: View {
+    @ObservedObject var viewModel: SearchViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Download the collection")
+                        .font(.headline)
+                    Text("Stream every object from The Met in the background with progress updates and cancellation.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let status = viewModel.downloadStatus {
+                Text(status)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let progress = viewModel.downloadProgress {
+                ProgressView(value: Double(progress.completed), total: Double(progress.total))
+            } else if viewModel.isDownloadingCollection {
+                ProgressView()
+            }
+
+            if let error = viewModel.downloadError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Button(action: viewModel.startCollectionDownload) {
+                    Label("Download the collection", systemImage: "arrow.down.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .disabled(viewModel.isDownloadingCollection)
+
+                if viewModel.isDownloadingCollection {
+                    Button(role: .cancel, action: viewModel.cancelCollectionDownload) {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(.thinMaterial))
     }
 }
 
