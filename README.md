@@ -75,6 +75,14 @@ for try await object in client.allObjects(
 }
 ```
 
+Retry attempts triggered by 429 or 5xx responses (or transient transport errors) can be surfaced to your UI via the `onRetry` callback. This enables lightweight toasts or metrics so users know downloads are still progressing:
+
+```swift
+let client = MetClient(onRetry: { event in
+    print("Retry #\(event.attempt) in \(event.delay)s due to \(event.reason)")
+})
+```
+
 Fetch departments or search directly:
 
 ```swift
