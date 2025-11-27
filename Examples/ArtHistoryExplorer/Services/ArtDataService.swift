@@ -65,16 +65,35 @@ public struct ArtDataService {
         switch source {
         case .met(let id):
             let object = try await metClient.object(id: id)
+            let culture = [object.culture, object.dynasty, object.period, object.reign]
+                .compactMap { value in
+                    guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), trimmed.isEmpty == false else { return nil }
+                    return trimmed
+                }
+                .joined(separator: " • ")
+            let location = [object.city, object.state, object.county, object.country]
+                .compactMap { value in
+                    guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), trimmed.isEmpty == false else { return nil }
+                    return trimmed
+                }
+                .joined(separator: ", ")
+
             return ArtworkDetail(
                 title: object.title ?? "Untitled",
                 artist: object.artistDisplayName?.isEmpty == false ? object.artistDisplayName! : "Unknown artist",
                 museum: "The Met",
                 dateText: object.objectDate ?? "",
                 medium: object.medium ?? "",
-                culture: object.culture ?? object.dynasty ?? object.period ?? "",
+                culture: culture,
                 dimensions: object.dimensions ?? "",
                 creditLine: object.creditLine ?? "",
                 description: object.classification ?? object.department ?? "",
+                classification: object.classification ?? "",
+                objectName: object.objectName ?? "",
+                location: location,
+                accessionNumber: object.accessionNumber ?? "",
+                tags: object.tags?.map(\.term) ?? [],
+                objectURL: URL(string: object.objectURL ?? ""),
                 imageURL: URL(string: object.primaryImageSmall ?? object.primaryImage ?? ""),
                 source: .met(id: object.objectID)
             )
@@ -90,6 +109,12 @@ public struct ArtDataService {
                 dimensions: object.dimensions ?? "",
                 creditLine: "",
                 description: object.description ?? "",
+                classification: object.objectType ?? "",
+                objectName: object.title ?? "",
+                location: object.department ?? "",
+                accessionNumber: object.id.description,
+                tags: [],
+                objectURL: nil,
                 imageURL: URL(string: object.image ?? ""),
                 source: .nationalGallery(id: object.id)
             )

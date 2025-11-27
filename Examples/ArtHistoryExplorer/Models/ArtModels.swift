@@ -60,6 +60,12 @@ public struct ArtworkDetail: Identifiable, Equatable {
     public let dimensions: String
     public let creditLine: String
     public let description: String
+    public let classification: String
+    public let objectName: String
+    public let location: String
+    public let accessionNumber: String
+    public let tags: [String]
+    public let objectURL: URL?
     public let imageURL: URL?
     public let source: ArtworkSource
 }
