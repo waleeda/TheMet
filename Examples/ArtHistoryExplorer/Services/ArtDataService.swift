@@ -29,6 +29,27 @@ public struct ArtDataService {
         try await metClient.departments()
     }
 
+    public func objects(in department: Department, limit: Int = 24) async throws -> [DepartmentObject] {
+        let query = ObjectQuery(departmentIds: [department.departmentId], hasImages: true)
+        let idsResponse = try await metClient.objectIDs(for: query)
+        let ids = idsResponse.objectIDs.prefix(limit)
+
+        return try await withThrowingTaskGroup(of: DepartmentObject?.self) { group in
+            for id in ids {
+                group.addTask {
+                    let object = try await metClient.object(id: id)
+                    return DepartmentObject(metObject: object)
+                }
+            }
+
+            var objects: [DepartmentObject] = []
+            for try await object in group {
+                if let object { objects.append(object) }
+            }
+            return objects.sorted { $0.title < $1.title }
+        }
+    }
+
     public func suggestions(for term: String) async throws -> [String] {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 3 else { return [] }

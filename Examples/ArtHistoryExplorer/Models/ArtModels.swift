@@ -48,3 +48,33 @@ public struct CombinedSearchResult: Identifiable, Equatable {
     public let imageURL: URL?
     public let source: ArtworkSource
 }
+
+public struct DepartmentObject: Identifiable, Equatable {
+    public let id: Int
+    public let title: String
+    public let artist: String
+    public let dateText: String
+    public let medium: String
+    public let classification: String
+    public let imageURL: URL?
+    public let creditLine: String?
+    public let objectURL: URL?
+    public let metObject: MetObject
+
+    public init(metObject: MetObject) {
+        self.id = metObject.objectID
+        self.title = metObject.title ?? "Untitled"
+        self.artist = metObject.artistDisplayName?.isEmpty == false ? metObject.artistDisplayName! : "Unknown artist"
+        self.dateText = metObject.objectDate ?? ""
+        self.medium = metObject.medium ?? ""
+        self.classification = metObject.classification ?? metObject.objectName ?? ""
+        self.imageURL = URL(string: metObject.primaryImageSmall ?? metObject.primaryImage ?? "")
+        self.creditLine = metObject.creditLine
+        if let urlString = metObject.objectURL, let url = URL(string: urlString) {
+            self.objectURL = url
+        } else {
+            self.objectURL = nil
+        }
+        self.metObject = metObject
+    }
+}

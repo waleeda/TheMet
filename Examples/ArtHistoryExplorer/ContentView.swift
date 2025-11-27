@@ -4,6 +4,7 @@ import TheMet
 struct ContentView: View {
     @EnvironmentObject private var timelineViewModel: ArtTimelineViewModel
     @EnvironmentObject private var searchViewModel: SearchViewModel
+    @EnvironmentObject private var departmentViewModel: DepartmentExplorerViewModel
 
     var body: some View {
         TabView {
@@ -15,6 +16,9 @@ struct ContentView: View {
 
             LessonsScreen(lessons: timelineViewModel.lessons)
                 .tabItem { Label("Lessons", systemImage: "book") }
+
+            DepartmentExplorerScreen(viewModel: departmentViewModel)
+                .tabItem { Label("Departments", systemImage: "folder") }
         }
     }
 }
@@ -347,5 +351,154 @@ struct FilterControls: View {
         }
         .padding()
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+    }
+}
+
+struct DepartmentExplorerScreen: View {
+    @ObservedObject var viewModel: DepartmentExplorerViewModel
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if viewModel.isLoading && viewModel.departments.isEmpty {
+                    ProgressView("Loading departments…")
+                } else if let error = viewModel.error {
+                    ContentUnavailableView("Couldn’t load departments", systemImage: "folder.badge.questionmark", description: Text(error))
+                } else if viewModel.departments.isEmpty {
+                    ContentUnavailableView("No departments found", systemImage: "folder")
+                } else {
+                    List(viewModel.departments, id: \.departmentId) { department in
+                        NavigationLink(department.displayName) {
+                            DepartmentDetailScreen(department: department)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Departments")
+            .toolbar { if viewModel.isLoading { ProgressView() } }
+            .task { viewModel.loadDepartmentsIfNeeded() }
+            .refreshable { viewModel.loadDepartments() }
+        }
+    }
+}
+
+struct DepartmentDetailScreen: View {
+    let department: Department
+    @StateObject private var objectsViewModel: DepartmentObjectsViewModel
+
+    init(department: Department, service: ArtDataService = ArtDataService()) {
+        self.department = department
+        _objectsViewModel = StateObject(wrappedValue: DepartmentObjectsViewModel(department: department, service: service))
+    }
+
+    var body: some View {
+        List {
+            if let error = objectsViewModel.error {
+                ContentUnavailableView("Unable to load \(department.displayName)", systemImage: "exclamationmark.triangle", description: Text(error))
+            } else if objectsViewModel.objects.isEmpty && objectsViewModel.isLoading == false {
+                ContentUnavailableView("No objects found", systemImage: "doc.on.clipboard")
+            } else {
+                ForEach(objectsViewModel.objects) { object in
+                    NavigationLink {
+                        DepartmentObjectDetailView(object: object)
+                    } label: {
+                        DepartmentObjectRow(object: object)
+                    }
+                }
+            }
+        }
+        .overlay {
+            if objectsViewModel.isLoading { ProgressView("Loading objects…") }
+        }
+        .navigationTitle(department.displayName)
+        .task { objectsViewModel.loadObjects() }
+        .refreshable { objectsViewModel.loadObjects() }
+    }
+}
+
+struct DepartmentObjectRow: View {
+    let object: DepartmentObject
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AsyncImage(url: object.imageURL) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(.thinMaterial)
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(object.title)
+                    .font(.headline)
+                Text(object.artist)
+                    .font(.subheadline)
+                Text(object.classification)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct DepartmentObjectDetailView: View {
+    let object: DepartmentObject
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                AsyncImage(url: object.imageURL) { image in
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.thinMaterial)
+                        .frame(height: 240)
+                        .overlay {
+                            ProgressView()
+                        }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(object.title)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    Text(object.artist)
+                        .font(.headline)
+                    if object.dateText.isEmpty == false {
+                        Text(object.dateText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(object.classification)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if object.medium.isEmpty == false {
+                    LabeledContent("Medium", value: object.medium)
+                }
+
+                if let credit = object.creditLine {
+                    LabeledContent("Credit line", value: credit)
+                }
+
+                if let url = object.objectURL {
+                    Link("View on The Met", destination: url)
+                        .font(.headline)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        }
+        .navigationTitle("Object details")
     }
 }
