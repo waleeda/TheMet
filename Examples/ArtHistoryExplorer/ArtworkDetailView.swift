@@ -17,6 +17,7 @@ struct ArtworkDetailView: View {
                     header(for: detail)
                     detailGrid(for: detail)
                     descriptionSection(for: detail)
+                    ArtworkHistorySection(history: detail.history)
                     relatedSection
                 } else if viewModel.isLoading {
                     ProgressView("Loading artwork…")
