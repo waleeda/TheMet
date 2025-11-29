@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
 import FoundationNetworking
+#endif
 
 public struct HarvardObjectIDsResponse: Codable, Equatable {
     public let totalRecords: Int
