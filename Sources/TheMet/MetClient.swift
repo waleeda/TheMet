@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
 import FoundationNetworking
+#endif
 
 public enum MetClientError: Error, LocalizedError {
     case invalidResponse

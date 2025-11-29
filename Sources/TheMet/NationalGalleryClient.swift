@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
 import FoundationNetworking
+#endif
 
 public enum NationalGalleryClientError: Error, LocalizedError {
     case invalidResponse

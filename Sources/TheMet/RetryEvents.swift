@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
 import FoundationNetworking
+#endif
 
 /// Describes why a request retry was triggered.
 public enum RetryReason: Sendable, Equatable {
