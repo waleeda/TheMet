@@ -78,6 +78,144 @@ final class MetClientTests: XCTestCase {
         XCTAssertEqual(response.terms, ["sun", "sunflower", "sunset"])
     }
 
+    func testDepartmentsCacheRespectsReloadPolicy() async throws {
+        let json = """
+        {"departments":[{"departmentId":1,"displayName":"First"}]}
+        """.data(using: .utf8)!
+
+        var callCount = 0
+        let session = URLSession.mock { _ in
+            callCount += 1
+            return json
+        }
+
+        let client = MetClient(session: session)
+        let first = try await client.departments()
+        let second = try await client.departments()
+        _ = try await client.departments(cachePolicy: .reload)
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(callCount, 2)
+    }
+
+    func testObjectCaching() async throws {
+        let object = MetObject(
+            objectID: 1,
+            isHighlight: nil,
+            accessionNumber: nil,
+            accessionYear: nil,
+            primaryImage: nil,
+            primaryImageSmall: nil,
+            department: nil,
+            objectName: nil,
+            title: "Cached",
+            culture: nil,
+            period: nil,
+            dynasty: nil,
+            reign: nil,
+            portfolio: nil,
+            artistDisplayName: nil,
+            artistDisplayBio: nil,
+            objectDate: nil,
+            medium: nil,
+            dimensions: nil,
+            creditLine: nil,
+            geographyType: nil,
+            city: nil,
+            state: nil,
+            county: nil,
+            country: nil,
+            classification: nil,
+            objectURL: nil,
+            constituents: nil,
+            tags: nil
+        )
+
+        let encoded = try JSONEncoder().encode(object)
+        var callCount = 0
+        let session = URLSession.mock { _ in
+            callCount += 1
+            return encoded
+        }
+
+        let client = MetClient(session: session)
+        let first = try await client.object(id: 1)
+        let second = try await client.object(id: 1)
+        let refreshed = try await client.object(id: 1, cachePolicy: .reload)
+
+        XCTAssertEqual(first.title, "Cached")
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(refreshed.title, "Cached")
+        XCTAssertEqual(callCount, 2)
+    }
+
+    func testPaginatedSearchSlicesResults() async throws {
+        let payload = ObjectIDsResponse(total: 5, objectIDs: [1, 2, 3, 4, 5])
+        let json = try JSONEncoder().encode(payload)
+        let session = URLSession.mock { _ in json }
+        let client = MetClient(session: session)
+
+        let page1 = try await client.search(SearchQuery(searchTerm: "art"), page: 1, pageSize: 2)
+        let page2 = try await client.search(SearchQuery(searchTerm: "art"), page: 2, pageSize: 2)
+
+        XCTAssertEqual(page1.objectIDs, [1, 2])
+        XCTAssertEqual(page1.page, 1)
+        XCTAssertTrue(page1.hasNextPage)
+
+        XCTAssertEqual(page2.objectIDs, [3, 4])
+        XCTAssertEqual(page2.page, 2)
+    }
+
+    func testSearchValidationRejectsBadDateRange() throws {
+        let query = SearchQuery(searchTerm: "art", dateBegin: 2025, dateEnd: 1900)
+        XCTAssertThrowsError(try query.validate()) { error in
+            XCTAssertEqual(error as? SearchQueryValidationError, .invalidDateRange)
+        }
+    }
+
+    func testSerializerExposesExpectedFields() {
+        let object = MetObject(
+            objectID: 99,
+            isHighlight: nil,
+            accessionNumber: nil,
+            accessionYear: nil,
+            primaryImage: "large",
+            primaryImageSmall: "small",
+            department: nil,
+            objectName: nil,
+            title: "Title",
+            culture: nil,
+            period: nil,
+            dynasty: nil,
+            reign: nil,
+            portfolio: nil,
+            artistDisplayName: nil,
+            artistDisplayBio: nil,
+            objectDate: "2020",
+            medium: nil,
+            dimensions: nil,
+            creditLine: nil,
+            geographyType: nil,
+            city: nil,
+            state: nil,
+            county: nil,
+            country: nil,
+            classification: nil,
+            objectURL: nil,
+            constituents: [MetConstituent(constituentID: 1, role: "Artist", name: "Name")],
+            tags: [MetTag(term: "tag")]
+        )
+
+        let normalized = MetObjectSerializer.normalize(object)
+
+        XCTAssertEqual(normalized.objectID, 99)
+        XCTAssertEqual(normalized.title, "Title")
+        XCTAssertEqual(normalized.objectDate, "2020")
+        XCTAssertEqual(normalized.primaryImageSmall, "small")
+        XCTAssertEqual(normalized.tags, ["tag"])
+        XCTAssertEqual(normalized.constituents.first?.role, "Artist")
+    }
+
     func testBuildsObjectQueryWithExtendedFilters() throws {
         var dateComponents = DateComponents()
         dateComponents.calendar = Calendar(identifier: .gregorian)
