@@ -8,6 +8,14 @@ public struct ObjectIDsResponse: Codable, Equatable {
     public let objectIDs: [Int]
 }
 
+public struct PaginatedObjectIDsResponse: Equatable {
+    public let total: Int
+    public let objectIDs: [Int]
+    public let page: Int
+    public let pageSize: Int
+    public let hasNextPage: Bool
+}
+
 public enum MetFilter: Equatable {
     case searchTerm(String)
     case departmentIds([Int])
@@ -248,6 +256,24 @@ public struct SearchQuery: Equatable {
         return items
     }
 
+    public func validate(page: Int? = nil, pageSize: Int? = nil) throws {
+        let trimmed = searchTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw SearchQueryValidationError.emptySearchTerm
+        }
+
+        if let dateBegin, let dateEnd, dateBegin > dateEnd {
+            throw SearchQueryValidationError.invalidDateRange
+        }
+
+        if let medium, medium.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw SearchQueryValidationError.invalidMedium
+        }
+
+        if let page, page <= 0 { throw SearchQueryValidationError.invalidPagination }
+        if let pageSize, pageSize <= 0 { throw SearchQueryValidationError.invalidPagination }
+    }
+
     public mutating func apply(filters: [MetFilter], capturedSearchTerm: inout String?) {
         for filter in filters {
             switch filter {
@@ -291,6 +317,26 @@ public enum SearchQueryError: Error, LocalizedError, Equatable {
     }
 }
 
+public enum SearchQueryValidationError: Error, LocalizedError, Equatable {
+    case emptySearchTerm
+    case invalidDateRange
+    case invalidMedium
+    case invalidPagination
+
+    public var errorDescription: String? {
+        switch self {
+        case .emptySearchTerm:
+            return "A search term is required to perform a search request."
+        case .invalidDateRange:
+            return "The starting date cannot be greater than the ending date."
+        case .invalidMedium:
+            return "If a medium is provided it must include at least one non-whitespace character."
+        case .invalidPagination:
+            return "Pagination parameters must be positive integers."
+        }
+    }
+}
+
 public struct MetObject: Codable, Equatable {
     public let objectID: Int
     public let isHighlight: Bool?
@@ -319,9 +365,78 @@ public struct MetObject: Codable, Equatable {
     public let country: String?
     public let classification: String?
     public let objectURL: String?
+    public let constituents: [MetConstituent]?
     public let tags: [MetTag]?
+
+    public init(
+        objectID: Int,
+        isHighlight: Bool?,
+        accessionNumber: String?,
+        accessionYear: String?,
+        primaryImage: String?,
+        primaryImageSmall: String?,
+        department: String?,
+        objectName: String?,
+        title: String?,
+        culture: String?,
+        period: String?,
+        dynasty: String?,
+        reign: String?,
+        portfolio: String?,
+        artistDisplayName: String?,
+        artistDisplayBio: String?,
+        objectDate: String?,
+        medium: String?,
+        dimensions: String?,
+        creditLine: String?,
+        geographyType: String?,
+        city: String?,
+        state: String?,
+        county: String?,
+        country: String?,
+        classification: String?,
+        objectURL: String?,
+        constituents: [MetConstituent]? = nil,
+        tags: [MetTag]? = nil
+    ) {
+        self.objectID = objectID
+        self.isHighlight = isHighlight
+        self.accessionNumber = accessionNumber
+        self.accessionYear = accessionYear
+        self.primaryImage = primaryImage
+        self.primaryImageSmall = primaryImageSmall
+        self.department = department
+        self.objectName = objectName
+        self.title = title
+        self.culture = culture
+        self.period = period
+        self.dynasty = dynasty
+        self.reign = reign
+        self.portfolio = portfolio
+        self.artistDisplayName = artistDisplayName
+        self.artistDisplayBio = artistDisplayBio
+        self.objectDate = objectDate
+        self.medium = medium
+        self.dimensions = dimensions
+        self.creditLine = creditLine
+        self.geographyType = geographyType
+        self.city = city
+        self.state = state
+        self.county = county
+        self.country = country
+        self.classification = classification
+        self.objectURL = objectURL
+        self.constituents = constituents
+        self.tags = tags
+    }
 }
 
 public struct MetTag: Codable, Equatable {
     public let term: String
+}
+
+public struct MetConstituent: Codable, Equatable {
+    public let constituentID: Int?
+    public let role: String?
+    public let name: String?
 }

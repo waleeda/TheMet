@@ -28,6 +28,8 @@ public final class MetClient {
     private let requestBuilder: RequestBuilder
     private let retryConfiguration: RetryConfiguration
     private let onRetry: RetryEventHandler?
+    private let departmentsCache = ValueCache<[Department]>()
+    private let objectCache = LRUCache<Int, MetObject>(capacity: 100)
 
     public struct DecodingStrategies {
         public var dateDecodingStrategy: JSONDecoder.DateDecodingStrategy
@@ -112,14 +114,49 @@ public final class MetClient {
     }
 
     public func departments() async throws -> [Department] {
-        let url = try buildURL(path: "departments")
+        return try await departments(cachePolicy: .useCache)
+    }
+
+    public func departments(cachePolicy: CachePolicy = .useCache) async throws -> [Department] {
+        if cachePolicy == .useCache, let cached = await departmentsCache.cached() {
+            return cached
+        }
+
+        let url = try buildURL(path: "departments", cacheBust: cachePolicy == .reload)
         let response = try await fetch(url: url, as: DepartmentsResponse.self)
+        await departmentsCache.store(response.departments)
         return response.departments
     }
 
     public func search(_ query: SearchQuery) async throws -> ObjectIDsResponse {
-        let url = try buildURL(path: "search", queryItems: query.queryItems)
+        return try await search(query, cachePolicy: .useCache)
+    }
+
+    public func search(_ query: SearchQuery, cachePolicy: CachePolicy = .useCache) async throws -> ObjectIDsResponse {
+        try query.validate()
+        let url = try buildURL(path: "search", queryItems: query.queryItems, cacheBust: cachePolicy == .reload)
         return try await fetch(url: url, as: ObjectIDsResponse.self)
+    }
+
+    public func search(
+        _ query: SearchQuery,
+        page: Int,
+        pageSize: Int,
+        cachePolicy: CachePolicy = .useCache
+    ) async throws -> PaginatedObjectIDsResponse {
+        try query.validate(page: page, pageSize: pageSize)
+        let baseResponse = try await search(query, cachePolicy: cachePolicy)
+        let startIndex = max(0, (page - 1) * pageSize)
+        let pagedIDs = Array(baseResponse.objectIDs.dropFirst(startIndex).prefix(pageSize))
+        let hasNext = startIndex + pageSize < baseResponse.total
+
+        return PaginatedObjectIDsResponse(
+            total: baseResponse.total,
+            objectIDs: pagedIDs,
+            page: page,
+            pageSize: pageSize,
+            hasNextPage: hasNext
+        )
     }
 
     public func search(using filters: [MetFilter]) async throws -> ObjectIDsResponse {
@@ -139,8 +176,18 @@ public final class MetClient {
     }
 
     public func object(id: Int) async throws -> MetObject {
-        let url = try buildURL(path: "objects/\(id)")
-        return try await fetch(url: url, as: MetObject.self)
+        return try await object(id: id, cachePolicy: .useCache)
+    }
+
+    public func object(id: Int, cachePolicy: CachePolicy = .useCache) async throws -> MetObject {
+        if cachePolicy == .useCache, let cached = await objectCache.value(for: id) {
+            return cached
+        }
+
+        let url = try buildURL(path: "objects/\(id)", cacheBust: cachePolicy == .reload)
+        let object = try await fetch(url: url, as: MetObject.self)
+        await objectCache.insert(object, for: id)
+        return object
     }
 
     public func relatedObjectIDs(for objectID: Int) async throws -> ObjectIDsResponse {
@@ -272,19 +319,24 @@ public final class MetClient {
         }
     }
 
-    private func buildURL(path: String, queryItems: [URLQueryItem] = []) throws -> URL {
+    private func buildURL(path: String, queryItems: [URLQueryItem] = [], cacheBust: Bool = false) throws -> URL {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw MetClientError.invalidResponse
         }
         components.path.append("/\(path)")
-        if !queryItems.isEmpty {
-            components.queryItems = queryItems
+        var finalItems = queryItems
+        if cacheBust {
+            finalItems.append(URLQueryItem(name: "cacheBust", value: UUID().uuidString))
+        }
+        if !finalItems.isEmpty {
+            components.queryItems = finalItems
         }
         guard let url = components.url else {
             throw MetClientError.invalidResponse
         }
         return url
     }
+
 
     private func fetch<T: Decodable>(url: URL, as type: T.Type) async throws -> T {
         var attempt = 0
